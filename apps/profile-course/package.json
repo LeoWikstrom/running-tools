@@ -1,0 +1,33 @@
+{
+  "name": "profile-course",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc && vite build",
+    "lint": "eslint src test",
+    "format": "prettier --write src test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "idb-keyval": "^6.3.0",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/leaflet": "^1.9.22",
+    "@types/pngjs": "^6.0.5",
+    "eslint": "^10.12.0",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.9.10",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
+  }
+}
