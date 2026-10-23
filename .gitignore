@@ -5,3 +5,5 @@ dist/
 coverage/
 packages/core/bench/cache/
 android/*/build/
+android/*/assets/
+android/*/keystore/

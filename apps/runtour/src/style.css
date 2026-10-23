@@ -219,3 +219,39 @@ button {
   font: inherit;
   font-size: 0.9rem;
 }
+
+#shelf {
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--edge);
+}
+
+#shelf h2 {
+  font-size: 0.95rem;
+  margin: 0 0 8px;
+}
+
+#shelf details {
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+
+#shelf summary {
+  cursor: pointer;
+}
+
+#shelf progress {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.shelf-place {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 0.9rem;
+}

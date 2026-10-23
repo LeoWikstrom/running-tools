@@ -13,6 +13,8 @@ import {
   type Tour,
 } from '@running/core/tour/types';
 import { fetchCandidates, searchPlacesByName } from './places';
+import { native, saveTourToPhone } from './native';
+import { initShelf } from './shelf';
 import { fetchPlaceText, type PlaceText } from './texts';
 import { initSheet } from './ui/sheet';
 
@@ -60,6 +62,8 @@ interface Course {
 }
 
 let course: Course | null = null;
+/** Stable across saves of the same tour, so re-saving updates in place. */
+let tourId: string | null = null;
 let courseLine: L.Polyline | null = null;
 let candidates: PlaceCandidate[] = [];
 /** Places added by hand; they bypass the corridor and the thinning. */
@@ -97,6 +101,7 @@ function setCourse(name: string, points: GpxPoint[]): void {
     distance += haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
   }
   course = { name, points, lats, lons, distance };
+  tourId = null;
   candidates = [];
   manual = [];
   places = [];
@@ -281,38 +286,43 @@ gpxInput.addEventListener('change', () => {
   })();
 });
 
+/** Restore a tour into the editor: course, places, texts, settings. */
+function applyTour(tour: Tour): void {
+  const points: GpxPoint[] = tour.route.points.map((p) => ({
+    lat: p[0]!,
+    lon: p[1]!,
+    ele: p[2] ?? null,
+  }));
+  setCourse(tour.name, points);
+  tourId = tour.id;
+  targetSlider.value = String(tour.settings.targetSeconds);
+  targetOutput.textContent = targetSlider.value;
+  places = tour.places.map((p) => ({
+    ...p,
+    types: [],
+    offset: 0,
+    sources: p.sources,
+  }));
+  for (const p of tour.places) {
+    if (p.text) {
+      texts.set(p.id, {
+        text: p.text,
+        sourceUrl: p.sources.find((s) => s.kind === 'wikipedia')?.url,
+        needsReview: p.needsReview ?? false,
+        reviewed: !(p.needsReview ?? false),
+      });
+    }
+  }
+  render();
+  setStatus(`Tour “${tour.name}” loaded: ${tour.places.length} places.`);
+}
+
 tourInput.addEventListener('change', () => {
   const file = tourInput.files?.[0];
   if (!file) return;
   void (async () => {
     try {
-      const tour = validateTour(JSON.parse(await file.text()));
-      const points: GpxPoint[] = tour.route.points.map((p) => ({
-        lat: p[0]!,
-        lon: p[1]!,
-        ele: p[2] ?? null,
-      }));
-      setCourse(tour.name, points);
-      targetSlider.value = String(tour.settings.targetSeconds);
-      targetOutput.textContent = targetSlider.value;
-      places = tour.places.map((p) => ({
-        ...p,
-        types: [],
-        offset: 0,
-        sources: p.sources,
-      }));
-      for (const p of tour.places) {
-        if (p.text) {
-          texts.set(p.id, {
-            text: p.text,
-            sourceUrl: p.sources.find((s) => s.kind === 'wikipedia')?.url,
-            needsReview: p.needsReview ?? false,
-            reviewed: !(p.needsReview ?? false),
-          });
-        }
-      }
-      render();
-      setStatus(`Tour “${tour.name}” loaded: ${tour.places.length} places.`);
+      applyTour(validateTour(JSON.parse(await file.text())));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     }
@@ -374,9 +384,10 @@ fetchTextsBtn.addEventListener('click', () => {
 
 function buildTour(): Tour {
   const c = course!;
+  tourId ??= crypto.randomUUID();
   return {
     version: 1,
-    id: crypto.randomUUID(),
+    id: tourId,
     name: c.name,
     lang: NARRATION_LANG,
     createdAt: new Date().toISOString(),
@@ -478,3 +489,19 @@ searchBtn.addEventListener('click', () => {
 nameSearch.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') searchBtn.click();
 });
+
+const shelf = initShelf(el<HTMLDivElement>('shelf'), applyTour, setStatus);
+const savePhoneBtn = el<HTMLButtonElement>('save-phone');
+if (native) {
+  savePhoneBtn.hidden = false;
+  savePhoneBtn.addEventListener('click', () => {
+    if (!course) return;
+    try {
+      const id = saveTourToPhone(JSON.stringify(buildTour()));
+      setStatus(`Tour saved on the phone (${id}). Generate its audio below.`);
+      shelf.refresh();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err));
+    }
+  });
+}
