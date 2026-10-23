@@ -13,6 +13,12 @@ import {
   type Tour,
 } from '@running/core/tour/types';
 import { fetchCandidates, searchPlacesByName } from './places';
+import {
+  startGpsPreview,
+  startSimulatedPreview,
+  type PreviewHandle,
+  type PreviewPlace,
+} from './preview';
 import { native, saveTourToPhone } from './native';
 import { initShelf } from './shelf';
 import { fetchPlaceText, type PlaceText } from './texts';
@@ -100,6 +106,7 @@ function setCourse(name: string, points: GpxPoint[]): void {
   for (let i = 1; i < points.length; i++) {
     distance += haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
   }
+  stopPreview();
   course = { name, points, lats, lons, distance };
   tourId = null;
   candidates = [];
@@ -247,6 +254,7 @@ function render(): void {
   const any = list.length > 0;
   toggleRow.hidden = !any && candidates.length === 0;
   textControls.hidden = !any;
+  previewControls.hidden = !any;
   searchRow.hidden = course === null;
 }
 
@@ -488,6 +496,90 @@ searchBtn.addEventListener('click', () => {
 
 nameSearch.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') searchBtn.click();
+});
+
+// --- Preview: a simulated runner (or real GPS) drives the trigger runtime.
+
+const previewControls = el<HTMLDivElement>('preview-controls');
+const paceInput = el<HTMLInputElement>('pace-input');
+const previewFast = el<HTMLInputElement>('preview-fast');
+const previewGps = el<HTMLInputElement>('preview-gps');
+const previewBtn = el<HTMLButtonElement>('preview-btn');
+const previewNote = el<HTMLParagraphElement>('preview-note');
+
+let preview: PreviewHandle | null = null;
+let runnerMarker: L.CircleMarker | null = null;
+
+function parsePace(value: string): number {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!m) return 330;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+function previewPlaces(): PreviewPlace[] {
+  return allPlaces().map((p) => ({
+    id: p.id,
+    name: p.name,
+    triggerD: p.triggerD,
+    text: texts.get(p.id)?.text ?? '',
+  }));
+}
+
+function stopPreview(): void {
+  preview?.stop();
+  preview = null;
+  runnerMarker?.remove();
+  runnerMarker = null;
+  previewBtn.textContent = 'Preview run';
+  previewNote.hidden = true;
+}
+
+previewBtn.addEventListener('click', () => {
+  if (preview) {
+    stopPreview();
+    setStatus('Preview stopped.');
+    return;
+  }
+  if (!course) return;
+  const callbacks = {
+    onPosition(lat: number, lon: number, d: number, offCourse: boolean) {
+      if (!runnerMarker) {
+        runnerMarker = L.circleMarker([lat, lon], {
+          radius: 8,
+          color: offCourse ? '#c0392b' : '#1d5c8f',
+          fillOpacity: 0.9,
+        }).addTo(map);
+      } else {
+        runnerMarker.setLatLng([lat, lon]);
+        runnerMarker.setStyle({ color: offCourse ? '#c0392b' : '#1d5c8f' });
+      }
+      setStatus(`Preview at ${(d / 1000).toFixed(2)} km${offCourse ? ' — off course' : ''}`);
+    },
+    onSpeak(place: PreviewPlace) {
+      setStatus(`▶ ${place.name}`);
+      map.panTo([runnerMarker?.getLatLng().lat ?? 0, runnerMarker?.getLatLng().lng ?? 0]);
+    },
+    onInfo(text: string) {
+      setStatus(text);
+    },
+    onDone() {
+      stopPreview();
+      setStatus('Preview finished.');
+    },
+  };
+  preview = previewGps.checked
+    ? startGpsPreview(course.lats, course.lons, previewPlaces(), NARRATION_LANG, callbacks)
+    : startSimulatedPreview(
+        course.lats,
+        course.lons,
+        previewPlaces(),
+        NARRATION_LANG,
+        parsePace(paceInput.value),
+        previewFast.checked ? 10 : 1,
+        callbacks,
+      );
+  previewBtn.textContent = 'Stop preview';
+  previewNote.hidden = !previewGps.checked;
 });
 
 const shelf = initShelf(el<HTMLDivElement>('shelf'), applyTour, setStatus);

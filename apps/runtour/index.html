@@ -49,6 +49,20 @@
             <button id="save-phone" hidden>Save to phone</button>
           </div>
         </div>
+        <div id="preview-controls" hidden>
+          <div class="row">
+            <label class="control pace-control">
+              <span>Pace min/km</span>
+              <input type="text" id="pace-input" value="5:30" size="5" />
+            </label>
+            <label class="check"><input type="checkbox" id="preview-fast" /> ×10</label>
+            <label class="check"><input type="checkbox" id="preview-gps" /> real GPS</label>
+            <button id="preview-btn">Preview run</button>
+          </div>
+          <p class="hint" id="preview-note" hidden>
+            The browser preview needs the screen on; the Android app runs with it off.
+          </p>
+        </div>
         <label id="toggle-row" hidden><input type="checkbox" id="toggle-markers" checked /> Show place markers</label>
         <div id="search-row" hidden>
           <input type="search" id="name-search" placeholder="Add a place by name…" />

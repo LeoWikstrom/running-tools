@@ -261,3 +261,26 @@ button {
   color: white;
   border: none;
 }
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9rem;
+  min-height: 36px;
+}
+
+.pace-control {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+
+#preview-controls {
+  margin: 8px 0;
+}
+
+#preview-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
