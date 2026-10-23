@@ -189,3 +189,33 @@ button {
   margin: 8px 0;
   font-size: 0.9rem;
 }
+
+#text-controls {
+  margin: 12px 0;
+}
+
+#text-controls input[type='range'] {
+  width: 100%;
+}
+
+#place-list details {
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+#place-list summary {
+  cursor: pointer;
+}
+
+#place-list textarea {
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: CanvasText;
+  padding: 6px;
+  font: inherit;
+  font-size: 0.9rem;
+}
