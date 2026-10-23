@@ -1,4 +1,4 @@
-import { SAMPLE_STEP_M } from '../gpx/profile';
+import { SAMPLE_STEP_M } from '@running/core/gpx/profile';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 

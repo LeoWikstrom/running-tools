@@ -5,16 +5,16 @@ import {
   pruneDeadEnds,
   sampleEdgeElevations,
   snapToNode,
-} from '../graph/build';
-import { otherNode, type Graph } from '../graph/types';
-import { deleteArea, listAreas, saveArea } from '../net/areaStore';
-import { deleteTraces, listTraces, loadTraceCounts, saveTraces } from '../net/traceStore';
-import { fetchTracePoints } from '../net/traces';
-import { applyTraceCoverage } from '../graph/traces';
-import { fetchNetwork, getNetwork } from '../net/overpass';
-import { TerrainSampler } from '../net/terrain';
-import { haversineMeters } from '../shared/geo';
-import type { TargetProfile } from '../gpx/profile';
+} from '@running/core/graph/build';
+import { otherNode, type Graph } from '@running/core/graph/types';
+import { deleteArea, listAreas, saveArea } from '@running/core/net/areaStore';
+import { deleteTraces, listTraces, loadTraceCounts, saveTraces } from '@running/core/net/traceStore';
+import { fetchTracePoints } from '@running/core/net/traces';
+import { applyTraceCoverage } from '@running/core/graph/traces';
+import { fetchNetwork, getNetwork } from '@running/core/net/overpass';
+import { TerrainSampler } from '@running/core/net/terrain';
+import { haversineMeters } from '@running/core/geo';
+import type { TargetProfile } from '@running/core/gpx/profile';
 import type {
   CoursePathRef,
   CourseResult,
@@ -25,8 +25,8 @@ import type {
   ViaPoint,
   WorkerToMain,
 } from '../shared/messages';
-import { dijkstra } from '../graph/dijkstra';
-import { matchTrackToGraph } from '../graph/match';
+import { dijkstra } from '@running/core/graph/dijkstra';
+import { matchTrackToGraph } from '@running/core/graph/match';
 import {
   DEFAULT_WINDOW_M,
   deleteNodesFromPath,
@@ -34,11 +34,11 @@ import {
   moveNodeInPath,
   pathRoot,
   reroutePath,
-} from './edit';
-import { pathNodes } from '../graph/ksp';
-import { beamSearch } from './beam';
-import { improveCandidates, sameRunAs } from './improve';
-import { randomWalkSearch, type WalkCandidate } from './randomWalk';
+} from '@running/core/search/edit';
+import { pathNodes } from '@running/core/graph/ksp';
+import { beamSearch } from '@running/core/search/beam';
+import { improveCandidates, sameRunAs } from '@running/core/search/improve';
+import { randomWalkSearch, type WalkCandidate } from '@running/core/search/randomWalk';
 import {
   assembleCourse,
   scoreBreakdown,
@@ -46,7 +46,7 @@ import {
   DEFAULT_WEIGHTS,
   MIX_ROAD,
   type CoursePath,
-} from './score';
+} from '@running/core/search/score';
 
 function post(msg: WorkerToMain): void {
   postMessage(msg);

@@ -1,4 +1,4 @@
-import { buildProfileFromSamples, SAMPLE_STEP_M, type TargetProfile } from '../gpx/profile';
+import { buildProfileFromSamples, SAMPLE_STEP_M, type TargetProfile } from '@running/core/gpx/profile';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const W = 360;

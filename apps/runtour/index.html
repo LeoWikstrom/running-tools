@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#2d7a4f" />
+    <title>RunTour</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="sheet">
+      <div id="sheet-top">
+        <div id="sheet-handle" role="button" aria-label="Resize the panel" tabindex="0"></div>
+      </div>
+      <section id="controls">
+        <h1>RunTour</h1>
+        <div class="row" id="gpx-row">
+          <label class="control">
+            <span>Course GPX</span>
+            <input type="file" id="gpx-input" accept=".gpx,application/gpx+xml" />
+          </label>
+        </div>
+        <p class="hint" id="course-stats" hidden></p>
+        <p class="hint" id="hint">Upload a GPX of the course you plan to run.</p>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

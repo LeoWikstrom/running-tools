@@ -1,4 +1,4 @@
-import { buildGpx } from '../gpx/export';
+import { buildGpx } from '@running/core/gpx/export';
 import type { CourseResult } from '../shared/messages';
 
 const SURFACE_NAMES = ['paved', 'gravel', 'trail', 'unknown'];

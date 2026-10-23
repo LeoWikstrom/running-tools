@@ -1,5 +1,5 @@
-import type { TargetProfile } from './gpx/profile';
-import { cacheGet, cacheSet } from './net/cache';
+import type { TargetProfile } from '@running/core/gpx/profile';
+import { cacheGet, cacheSet } from '@running/core/net/cache';
 import type { CourseResult, LatLon } from './shared/messages';
 
 export interface SessionSettings {

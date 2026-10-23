@@ -1,7 +1,6 @@
-export interface LatLon {
-  lat: number;
-  lon: number;
-}
+import type { LatLon } from '@running/core/geo';
+
+export type { LatLon };
 
 export interface ViaPoint {
   lat: number;

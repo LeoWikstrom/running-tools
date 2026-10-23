@@ -1,6 +1,6 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { bearingDeg } from '../shared/geo';
+import { bearingDeg } from '@running/core/geo';
 import type { CourseSegment, LatLon } from '../shared/messages';
 
 const SURFACE_COLORS = ['#2563eb', '#d97706', '#16a34a', '#6b7280'];

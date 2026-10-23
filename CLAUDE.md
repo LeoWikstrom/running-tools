@@ -1,0 +1,18 @@
+# running-tools monorepo
+
+An npm workspace. Full plan for the audio guide in `docs/build-plan.md` — read it before
+starting a new phase.
+
+- `packages/core` — shared TypeScript, imported as `@running/core/<path>` (source-level
+  exports, no build step): `geo`, `gpx/`, `graph/`, `net/`, `search/`, and (from phase 1)
+  `poi/`, `text/`, `tour/`. Tests in `packages/core/test` (vitest, node env).
+- `apps/profile-course` — the race-profile course generator (see its own CLAUDE.md). Its
+  non-UI modules were moved into core in phase 0; only `src/main.ts`, `src/session.ts`,
+  `src/ui/`, `src/shared/messages.ts` and `src/search/worker.ts` remain.
+- `apps/runtour` — audio-guide preparation app (map, places, texts, tour.json). Accent green.
+- `android/runtour` — (phase 3) plain Java, Gradle-free build modelled on
+  `~/sylvester/sylvester/build.sh` (aapt2, javac, d8, apksigner); WebView loads the runtour
+  build from assets.
+
+Conventions: finish a phase → `npm test` and `npm run lint` from the root → commit with the
+phase name → next phase. Dev servers bind 0.0.0.0 for phone testing in Termux.

@@ -1,0 +1,109 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: light dark;
+  --panel-bg: light-dark(#ffffff, #26282c);
+  --edge: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.14));
+  /* RunTour's accent is green — the sister app profile-course owns pink. */
+  --accent: #2d7a4f;
+  --accent-deep: #1f5c3a;
+  accent-color: var(--accent);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  font-family: system-ui, sans-serif;
+}
+
+#map {
+  position: fixed;
+  inset: 0;
+  user-select: none;
+}
+
+#sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background: var(--panel-bg);
+  color: CanvasText;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -2px 12px rgb(0 0 0 / 0.25);
+  padding: 4px 16px 16px;
+  max-height: calc(100vh - 64px);
+  max-height: calc(100dvh - 64px);
+  overflow-y: auto;
+}
+
+#sheet-top {
+  position: sticky;
+  top: -4px;
+  z-index: 2;
+  min-height: 42px;
+  margin: -4px -16px 4px;
+  padding: 4px 16px 0;
+  background: var(--panel-bg);
+}
+
+#sheet-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  touch-action: none;
+  cursor: grab;
+}
+
+#sheet-handle::before {
+  content: '';
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: GrayText;
+}
+
+h1 {
+  font-size: 1.1rem;
+  margin: 0 0 12px;
+}
+
+.control {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.control > span {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+
+.hint {
+  font-size: 0.85rem;
+  color: GrayText;
+  margin: 8px 0;
+}
+
+@media (min-width: 900px) {
+  #sheet {
+    top: 0;
+    right: auto;
+    width: 410px;
+    max-height: none;
+    border-radius: 0;
+    box-shadow: 3px 0 14px rgb(0 0 0 / 0.35);
+  }
+  #sheet-handle {
+    display: none;
+  }
+  #sheet-top {
+    position: static;
+    min-height: 44px;
+  }
+}

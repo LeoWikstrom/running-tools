@@ -1,7 +1,7 @@
-import { buildTargetProfile, SAMPLE_STEP_M, sliceProfile, type TargetProfile } from './gpx/profile';
-import { parseGpx, type ParsedGpx } from './gpx/parse';
-import { SURFACE_PRESETS } from './search/score';
-import { haversineMeters } from './shared/geo';
+import { buildTargetProfile, SAMPLE_STEP_M, sliceProfile, type TargetProfile } from '@running/core/gpx/profile';
+import { parseGpx, type ParsedGpx } from '@running/core/gpx/parse';
+import { SURFACE_PRESETS } from '@running/core/search/score';
+import { haversineMeters } from '@running/core/geo';
 import { loadSession, requestPersistentStorage, saveSession } from './session';
 import type {
   AreaInfo,
