@@ -107,3 +107,85 @@ h1 {
     min-height: 44px;
   }
 }
+
+.row {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.lang-control {
+  flex: 0 0 auto;
+}
+
+button {
+  min-height: 36px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--edge);
+  background: var(--panel-bg);
+  color: CanvasText;
+  cursor: pointer;
+}
+
+#find-places {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
+
+#search-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+#search-row input {
+  flex: 1;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: CanvasText;
+}
+
+#search-results {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+
+#search-results button {
+  width: 100%;
+  text-align: left;
+  margin-bottom: 4px;
+}
+
+#place-list {
+  margin: 12px 0 0;
+  padding-left: 1.5em;
+}
+
+#place-list li {
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+#place-list small {
+  color: GrayText;
+  margin-left: 4px;
+}
+
+.remove-place {
+  min-height: 24px;
+  padding: 0 8px;
+  margin-left: 8px;
+  border-radius: 6px;
+}
+
+#toggle-row {
+  display: block;
+  margin: 8px 0;
+  font-size: 0.9rem;
+}

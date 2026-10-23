@@ -154,12 +154,19 @@ export async function fetchNetwork(
   radiusMeters: number,
   options: FetchNetworkOptions = {},
 ): Promise<OverpassResponse> {
+  return fetchOverpass(buildQuery(center, radiusMeters), cacheKey(center, radiusMeters), options);
+}
+
+/** Run any Overpass query through the cache, mirror and retry machinery. */
+export async function fetchOverpass(
+  query: string,
+  key: string,
+  options: FetchNetworkOptions = {},
+): Promise<OverpassResponse> {
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
-  const key = cacheKey(center, radiusMeters);
   const cached = await cacheGet<OverpassResponse>(key);
   if (cached) return cached;
 
-  const query = buildQuery(center, radiusMeters);
   let lastError: unknown = null;
   // The public servers reject or hang individually and intermittently (quick
   // 504s under load, dead mirrors), so fail fast per endpoint and make a few

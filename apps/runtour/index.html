@@ -24,6 +24,21 @@
         </div>
         <p class="hint" id="course-stats" hidden></p>
         <p class="hint" id="hint">Upload a GPX of the course you plan to run.</p>
+        <div class="row" id="places-row" hidden>
+          <label class="control lang-control">
+            <span>Local Wikipedia</span>
+            <input type="text" id="lang-input" value="sv" size="3" maxlength="7" />
+          </label>
+          <button id="find-places">Find places</button>
+        </div>
+        <p class="hint" id="status" hidden></p>
+        <label id="toggle-row" hidden><input type="checkbox" id="toggle-markers" checked /> Show place markers</label>
+        <div id="search-row" hidden>
+          <input type="search" id="name-search" placeholder="Add a place by name…" />
+          <button id="search-btn">Search</button>
+        </div>
+        <ul id="search-results" hidden></ul>
+        <ol id="place-list"></ol>
       </section>
     </div>
     <script type="module" src="/src/main.ts"></script>

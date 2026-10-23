@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<gpx version="1.1" creator="fixture">
+  <trk>
+    <name>Central Gothenburg loop</name>
+    <trkseg>
+      <trkpt lat="57.7072" lon="11.9668"></trkpt>
+      <trkpt lat="57.7066" lon="11.964"></trkpt>
+      <trkpt lat="57.7059" lon="11.9601"></trkpt>
+      <trkpt lat="57.7048" lon="11.9612"></trkpt>
+      <trkpt lat="57.704" lon="11.965"></trkpt>
+      <trkpt lat="57.7037" lon="11.9686"></trkpt>
+      <trkpt lat="57.7022" lon="11.9718"></trkpt>
+      <trkpt lat="57.7005" lon="11.9745"></trkpt>
+      <trkpt lat="57.6988" lon="11.977"></trkpt>
+      <trkpt lat="57.6971" lon="11.9796"></trkpt>
+      <trkpt lat="57.6977" lon="11.9762"></trkpt>
+      <trkpt lat="57.6988" lon="11.9735"></trkpt>
+      <trkpt lat="57.6992" lon="11.968"></trkpt>
+      <trkpt lat="57.699" lon="11.9605"></trkpt>
+      <trkpt lat="57.6975" lon="11.9585"></trkpt>
+      <trkpt lat="57.6956" lon="11.9568"></trkpt>
+      <trkpt lat="57.698" lon="11.9545"></trkpt>
+      <trkpt lat="57.6996" lon="11.9532"></trkpt>
+      <trkpt lat="57.7008" lon="11.9555"></trkpt>
+      <trkpt lat="57.7018" lon="11.9578"></trkpt>
+      <trkpt lat="57.7036" lon="11.9601"></trkpt>
+      <trkpt lat="57.705" lon="11.963"></trkpt>
+      <trkpt lat="57.706" lon="11.9655"></trkpt>
+      <trkpt lat="57.7072" lon="11.9668"></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

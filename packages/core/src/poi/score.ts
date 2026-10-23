@@ -1,0 +1,127 @@
+import type { PlaceCandidate } from './types';
+
+/**
+ * Wikidata P31 classes worth telling about. Exact-id matching, no subclass
+ * reasoning, so common subtypes are listed alongside their parents.
+ */
+export const WORTH_TELLING_WIKIDATA = new Set([
+  'Q16970', // church building
+  'Q317557', // parish church
+  'Q2977', // cathedral
+  'Q108325', // chapel
+  'Q44613', // monastery
+  'Q32815', // mosque
+  'Q34627', // synagogue
+  'Q23413', // castle
+  'Q81106', // fortress
+  'Q57821', // fortification
+  'Q33506', // museum
+  'Q207694', // art museum
+  'Q4989906', // monument
+  'Q5003624', // memorial
+  'Q860861', // sculpture
+  'Q179700', // statue
+  'Q12280', // bridge
+  'Q158438', // arch bridge
+  'Q174782', // square
+  'Q24354', // theatre building
+  'Q153562', // opera house
+  'Q483110', // stadium
+  'Q1329623', // cultural centre
+  'Q16560', // palace
+  'Q39715', // lighthouse
+  'Q12518', // tower
+  'Q11303', // skyscraper
+  'Q22698', // park
+  'Q167346', // botanical garden
+  'Q43501', // zoo
+  'Q39614', // cemetery
+  'Q11755880', // residential building (notable ones carry heritage anyway)
+  'Q35112127', // historic building
+  'Q1497364', // building complex
+  'Q2080521', // market hall
+]);
+
+/** OSM tag values (historic=*, tourism=*) worth telling about. */
+export const WORTH_TELLING_OSM = new Set([
+  'castle',
+  'church',
+  'cathedral',
+  'monastery',
+  'fort',
+  'citywalls',
+  'ruins',
+  'monument',
+  'memorial',
+  'archaeological_site',
+  'ship',
+  'wayside_shrine',
+  'battlefield',
+  'museum',
+  'gallery',
+  'attraction',
+  'artwork',
+  'viewpoint',
+  'theatre',
+  'stadium',
+  'lighthouse',
+]);
+
+/**
+ * Administrative entities whose coordinate is just a pin in the middle of
+ * town: never a place the runner is passing. Exact P31 ids, best effort.
+ */
+export const EXCLUDED_WIKIDATA = new Set([
+  'Q515', // city
+  'Q3957', // town
+  'Q532', // village
+  'Q6256', // country
+  'Q127448', // municipality of Sweden
+  'Q2983893', // quarter/district
+  'Q123705', // neighborhood
+  'Q12813115', // urban area of Sweden
+  'Q1907114', // metropolitan area
+  'Q13220204', // second-level administrative division
+]);
+
+export function isExcludedType(c: PlaceCandidate): boolean {
+  return c.types.some((t) => EXCLUDED_WIKIDATA.has(t));
+}
+
+function hasWorthTellingType(c: PlaceCandidate): boolean {
+  return c.types.some((t) => WORTH_TELLING_WIKIDATA.has(t) || WORTH_TELLING_OSM.has(t));
+}
+
+/** Sitelinks saturate here: ~30 language editions is a world-famous place. */
+const SITELINKS_FULL = 30;
+/** Page length saturates here: ~20 kB is a thorough article. */
+const PAGE_LENGTH_FULL = 20_000;
+
+/**
+ * Interest 0–100: sitelinks 0.4, page length 0.2, heritage designation 0.2,
+ * worth-telling type 0.2.
+ */
+export function interestScore(c: PlaceCandidate): number {
+  const sitelinkScore = Math.min(1, (c.sitelinks ?? 0) / SITELINKS_FULL);
+  const lengthScore = Math.min(1, (c.pageLength ?? 0) / PAGE_LENGTH_FULL);
+  const heritageScore = c.heritage ? 1 : 0;
+  const typeScore = hasWorthTellingType(c) ? 1 : 0;
+  return Math.round(
+    100 * (0.4 * sitelinkScore + 0.2 * lengthScore + 0.2 * heritageScore + 0.2 * typeScore),
+  );
+}
+
+/**
+ * A candidate earns its place with any signal at all: a Wikipedia page, a
+ * Wikidata item, a heritage designation or a worth-telling type. An OSM-only
+ * element with none of those (or no name) is a drop.
+ */
+export function hasSignal(c: PlaceCandidate): boolean {
+  if (!c.name) return false;
+  return (
+    c.wikipedia !== undefined ||
+    c.wikidataId !== undefined ||
+    c.heritage === true ||
+    hasWorthTellingType(c)
+  );
+}

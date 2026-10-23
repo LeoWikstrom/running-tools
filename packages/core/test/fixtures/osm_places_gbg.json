@@ -1,0 +1,934 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-07-24T11:04:51Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+
+{
+  "type": "node",
+  "id": 252340078,
+  "lat": 57.6980399,
+  "lon": 11.9788887,
+  "tags": {
+    "artist:wikidata": "Q6149327",
+    "artist_name": "Peter Linde",
+    "artwork_type": "statue",
+    "material": "bronze",
+    "name": "Karin Boye",
+    "subject:wikidata": "Q237413",
+    "subject:wikipedia": "sv:Karin Boye",
+    "tourism": "artwork",
+    "wikidata": "Q10543621",
+    "wikipedia": "sv:Karin Boye (staty)"
+  }
+},
+{
+  "type": "node",
+  "id": 252340079,
+  "lat": 57.6980218,
+  "lon": 11.9791410,
+  "tags": {
+    "name": "J. A. Wadman",
+    "tourism": "artwork",
+    "wikidata": "Q10538826"
+  }
+},
+{
+  "type": "node",
+  "id": 482738317,
+  "lat": 57.7071188,
+  "lon": 11.9668171,
+  "tags": {
+    "artist:wikidata": "Q725846",
+    "artist_name": "Bengt Erland Fogelberg",
+    "historic": "memorial",
+    "inscription": "Åt Konung Gustaf Adolf den Store Götheborgs grundläggare af Stadens innevånare År 1849",
+    "material": "bronze",
+    "memorial": "statue",
+    "name": "Gustav II Adolfs staty",
+    "subject:wikidata": "Q52938",
+    "subject:wikipedia": "sv:Gustav II Adolf",
+    "wikidata": "Q10511152",
+    "wikipedia": "sv:Gustav II Adolfs staty, Göteborg"
+  }
+},
+{
+  "type": "node",
+  "id": 1612525848,
+  "lat": 57.6983900,
+  "lon": 11.9616270,
+  "tags": {
+    "artist_name": "Charlotte Gyllenhammar",
+    "artwork_type": "sculpture",
+    "height": "2.45",
+    "material": "concrete",
+    "name": "Raoul Wallenberg minnesmärke",
+    "official_name": "Göteborgs Stads minnesmärke över Raoul Wallenberg",
+    "start_date": "2007",
+    "tourism": "artwork",
+    "website": "https://goteborgkonst.se/artwork/minnesmarke-raoul-wallenberg",
+    "wikidata": "Q10512845",
+    "wikipedia": "sv:Minnesmärke – Raoul Wallenberg"
+  }
+},
+{
+  "type": "node",
+  "id": 1649128512,
+  "lat": 57.7008742,
+  "lon": 11.9583080,
+  "tags": {
+    "artist:wikidata": "Q18043223",
+    "artwork_type": "sculpture",
+    "panoramax": "9d37d742-cebf-4a18-ac9c-20bc82fba1e3",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 1834243324,
+  "lat": 57.7005670,
+  "lon": 11.9526777,
+  "tags": {
+    "artist_name": "Sam Westerholm",
+    "artwork_type": "sculpture",
+    "material": "metal",
+    "name": "Genom arbete i arbete",
+    "name:cs": "sousoší Nosič železa",
+    "start_date": "1986-09",
+    "tourism": "artwork",
+    "wheelchair": "yes",
+    "wikidata": "Q10503870",
+    "wikipedia": "sv:Genom arbete i arbete"
+  }
+},
+{
+  "type": "node",
+  "id": 1852952439,
+  "lat": 57.6999840,
+  "lon": 11.9735149,
+  "tags": {
+    "addr:city": "Göteborg",
+    "addr:country": "SE",
+    "addr:housenumber": "39",
+    "addr:postcode": "411 37",
+    "addr:street": "Vasagatan",
+    "description": "Museum för konsthantverk och design",
+    "description:en": "Museum of fashion, design and decorative arts.",
+    "fee": "yes",
+    "museum": "design;craft",
+    "name": "Röhsska museet",
+    "name:en": "Röhsska museet",
+    "operator:type": "public",
+    "tourism": "museum",
+    "website": "https://rohsska.se/",
+    "wheelchair": "yes",
+    "wikidata": "Q3107443",
+    "wikipedia": "sv:Röhsska museet"
+  }
+},
+{
+  "type": "node",
+  "id": 1900565429,
+  "lat": 57.6991346,
+  "lon": 11.9696879,
+  "tags": {
+    "description": "Inscription: Till minne av dem som miste sina liv i den tragiska spårvagnsolyckan vid Vasaplatsen den 12 mars 1992.",
+    "historic": "memorial",
+    "material": "metal",
+    "memorial": "plaque",
+    "name": "Minnessten",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 2078806844,
+  "lat": 57.7020547,
+  "lon": 11.9721258,
+  "tags": {
+    "artist:wikidata": "Q5856706",
+    "artist_name": "Ingel Fallstedt",
+    "historic": "memorial",
+    "material": "bronze",
+    "memorial": "statue",
+    "name": "John Ericsson",
+    "subject:wikidata": "Q435290",
+    "subject:wikipedia": "sv:John Ericsson",
+    "wikidata": "Q10540573",
+    "wikipedia": "sv:John Ericsson (staty)"
+  }
+},
+{
+  "type": "node",
+  "id": 2154571555,
+  "lat": 57.7046812,
+  "lon": 11.9664071,
+  "tags": {
+    "check_date": "2025-09-25",
+    "fee": "no",
+    "name": "Miva Fine Art",
+    "opening_hours": "Mo-Fr 11:00-18:00; Sa 11:00-17:00; Su 12:00-16:00",
+    "tourism": "gallery"
+  }
+},
+{
+  "type": "node",
+  "id": 2392374375,
+  "lat": 57.6993158,
+  "lon": 11.9610728,
+  "tags": {
+    "historic": "boundary_stone",
+    "name": "Hagasten"
+  }
+},
+{
+  "type": "node",
+  "id": 2744283103,
+  "lat": 57.6961608,
+  "lon": 11.9557375,
+  "tags": {
+    "tourism": "viewpoint",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 3275139161,
+  "lat": 57.6991750,
+  "lon": 11.9762070,
+  "tags": {
+    "name": "Wetterling Gallery",
+    "tourism": "gallery"
+  }
+},
+{
+  "type": "node",
+  "id": 3393478041,
+  "lat": 57.6986316,
+  "lon": 11.9550425,
+  "tags": {
+    "addr:city": "Göteborg",
+    "addr:country": "SE",
+    "addr:housenumber": "7-9",
+    "addr:postcode": "413 01",
+    "addr:street": "Haga Nygata",
+    "check_date": "2026-04-04",
+    "contact:facebook": "https://www.facebook.com/goteborgsstadsmuseum/",
+    "contact:instagram": "https://www.instagram.com/goteborgsstadsmuseum",
+    "contact:website": "http://goteborgsstadsmuseum.se/besok-museet/hem-i-haga",
+    "contact:youtube": "https://www.youtube.com/user/goteborgsstadsmuseum",
+    "description": "Historiska lägenheter",
+    "email": "stadsmuseum@kultur.goteborg.se",
+    "fee": "varies",
+    "museum": "local",
+    "name": "Hem i Haga",
+    "operator": "Göteborgs Stadsmuseum",
+    "operator:type": "public",
+    "tourism": "museum",
+    "website": "https://goteborgsstadsmuseum.se/besok-oss/hem-i-haga/",
+    "wikidata": "Q28936176"
+  }
+},
+{
+  "type": "node",
+  "id": 3445809406,
+  "lat": 57.6974038,
+  "lon": 11.9557094,
+  "tags": {
+    "artwork_type": "sculpture",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 3450354857,
+  "lat": 57.6997553,
+  "lon": 11.9693423,
+  "tags": {
+    "artist_name": "Ivar Johnsson",
+    "calibration_point": "yes",
+    "height": "10",
+    "historic": "memorial",
+    "inscription": "De fria fåglarna plöja sin väg genom rymden. Många av dem nå kanske ej sitt fjärran mål. Stor sak i det. De dö fria.",
+    "material": "granite",
+    "memorial": "stele",
+    "name": "Torgny Segerstedtmonumentet",
+    "object:city": "Göteborg",
+    "object:country": "SE",
+    "object:housenumber": "4",
+    "object:postcode": "41134",
+    "object:street": "Vasaplatsen",
+    "start_date": "1955-03-31",
+    "wikidata": "Q10700098",
+    "wikimedia_commons": "File:Torgny Segerstedtmonumentet.jpg",
+    "wikipedia": "sv:Torgny Segerstedtmonumentet"
+  }
+},
+{
+  "type": "node",
+  "id": 3828387258,
+  "lat": 57.7047440,
+  "lon": 11.9662300,
+  "tags": {
+    "historic": "archaeological_site",
+    "location": "underground",
+    "website": "https://www.titthalet.se"
+  }
+},
+{
+  "type": "node",
+  "id": 4428082689,
+  "lat": 57.7029721,
+  "lon": 11.9716490,
+  "tags": {
+    "artist_name": "Johan Peter Molin",
+    "artwork_type": "sculpture",
+    "height": "2.2",
+    "material": "bronze",
+    "name": "Bältespännarna",
+    "name:sv": "Bältespännarna",
+    "start_date": "1914",
+    "tourism": "artwork",
+    "website": "https://goteborgkonst.se/artwork/baltespannarna",
+    "wikidata": "Q10438503",
+    "wikipedia": "sv:Bältespännarna"
+  }
+},
+{
+  "type": "node",
+  "id": 4982830923,
+  "lat": 57.7045727,
+  "lon": 11.9643506,
+  "tags": {
+    "artist:wikidata": "Q5608662",
+    "artist_name": "Bror Chronander",
+    "historic": "memorial",
+    "material": "bronze",
+    "memorial": "statue",
+    "name": "Peter Wieselgren",
+    "subject:wikidata": "Q1668522",
+    "subject:wikipedia": "sv:Peter Wieselgren",
+    "wheelchair": "yes",
+    "wikidata": "Q10625134",
+    "wikipedia": "sv:Peter Wieselgren (Göteborg)"
+  }
+},
+{
+  "type": "node",
+  "id": 5088367204,
+  "lat": 57.7065513,
+  "lon": 11.9677690,
+  "tags": {
+    "artist_name": "Camilla Bergman-Skoglund",
+    "artwork_type": "statue",
+    "material": "metal",
+    "name": "Lejon",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 5088367205,
+  "lat": 57.7066734,
+  "lon": 11.9677027,
+  "tags": {
+    "artist_name": "Camilla Bergman-Skoglund",
+    "artwork_type": "statue",
+    "material": "metal",
+    "name": "Lejon",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 5088405546,
+  "lat": 57.7067530,
+  "lon": 11.9685879,
+  "tags": {
+    "artist_name": "Per Hasselberg",
+    "artwork_type": "statue",
+    "loc_name": "Johanna i Brunnsparken",
+    "location": "overhead",
+    "name": "Johanna",
+    "official_name": "Såningskvinnan",
+    "tourism": "artwork",
+    "wikidata": "Q10688437",
+    "wikipedia": "sv:Såningskvinnan"
+  }
+},
+{
+  "type": "node",
+  "id": 5239521132,
+  "lat": 57.7024066,
+  "lon": 11.9690793,
+  "tags": {
+    "artist:wikidata": "Q47059169",
+    "artist_name": "Vassil Simittchiev",
+    "artwork_type": "statue",
+    "name": "Prometheus",
+    "panoramax": "a494e23a-8e90-4705-a6b3-6d5e1b2cc52c",
+    "subject:wikidata": "Q83160",
+    "tourism": "artwork",
+    "website": "http://www.goteborgkonst.com/?post_type=konstverk&p=1812"
+  }
+},
+{
+  "type": "node",
+  "id": 6665820585,
+  "lat": 57.7046429,
+  "lon": 11.9694944,
+  "tags": {
+    "artwork_type": "mural",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 6700471929,
+  "lat": 57.6971779,
+  "lon": 11.9795910,
+  "tags": {
+    "artist:wikidata": "Q48548",
+    "artist_name": "Carl Milles",
+    "artwork_type": "statue",
+    "material": "bronze",
+    "name": "Poseidon",
+    "name:en": "Statue of Poseidon",
+    "subject:wikidata": "Q41127",
+    "subject:wikipedia": "sv:Poseidon",
+    "tourism": "artwork",
+    "wheelchair": "yes",
+    "wikidata": "Q9344595",
+    "wikipedia": "sv:Poseidon med brunnskar"
+  }
+},
+{
+  "type": "node",
+  "id": 6886107809,
+  "lat": 57.6969886,
+  "lon": 11.9805407,
+  "tags": {
+    "artwork_type": "statue",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 6895980185,
+  "lat": 57.6967234,
+  "lon": 11.9798762,
+  "tags": {
+    "artist_name": "Ulf Celen",
+    "name": "I am the camera",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 7252633386,
+  "lat": 57.7056163,
+  "lon": 11.9619078,
+  "tags": {
+    "artist:wikidata": "Q4992397",
+    "artist_name": "John Börjeson",
+    "historic": "memorial",
+    "material": "bronze",
+    "memorial": "statue",
+    "name": "Jonas Alströmer",
+    "subject:wikidata": "Q632219",
+    "subject:wikipedia": "sv:Jonas Alströmer",
+    "wikidata": "Q57764882",
+    "wikipedia": "sv:Jonas Alströmers staty"
+  }
+},
+{
+  "type": "node",
+  "id": 9094598359,
+  "lat": 57.6965325,
+  "lon": 11.9550175,
+  "tags": {
+    "direction": "283",
+    "historic": "cannon",
+    "wikimedia_commons": "File:Skansen Kronan kanoner.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 9094598360,
+  "lat": 57.6964864,
+  "lon": 11.9549990,
+  "tags": {
+    "direction": "285",
+    "historic": "cannon",
+    "wikimedia_commons": "File:Skansen Kronan kanoner.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 9094598361,
+  "lat": 57.6964284,
+  "lon": 11.9549788,
+  "tags": {
+    "direction": "285",
+    "historic": "cannon",
+    "wikimedia_commons": "File:Skansen Kronan kanoner.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 9094598362,
+  "lat": 57.6963378,
+  "lon": 11.9548061,
+  "tags": {
+    "direction": "324",
+    "historic": "cannon"
+  }
+},
+{
+  "type": "node",
+  "id": 9094598363,
+  "lat": 57.6963179,
+  "lon": 11.9547532,
+  "tags": {
+    "direction": "323",
+    "historic": "cannon"
+  }
+},
+{
+  "type": "node",
+  "id": 9094598364,
+  "lat": 57.6962888,
+  "lon": 11.9546991,
+  "tags": {
+    "direction": "322",
+    "historic": "cannon",
+    "wikimedia_commons": "File:Skansen Kronan kanon.jpg"
+  }
+},
+{
+  "type": "node",
+  "id": 9889749782,
+  "lat": 57.6996875,
+  "lon": 11.9534046,
+  "tags": {
+    "artist:wikidata": "Q4956641",
+    "artist_name": "Britt-Marie Jern",
+    "artwork_type": "bust",
+    "inscription": "…bed för dem som staden kväver|att de länge må bli unga|och om troll och högland drömma|uppå Tullens svarta krog",
+    "material": "bronze",
+    "name": "Dan Andersson",
+    "start_date": "1990",
+    "subject:wikidata": "Q438109",
+    "subject:wikipedia": "sv:Dan Andersson",
+    "tourism": "artwork",
+    "wikidata": "Q10466479",
+    "wikipedia": "sv:Dan Andersson (staty)"
+  }
+},
+{
+  "type": "node",
+  "id": 9908198349,
+  "lat": 57.6986303,
+  "lon": 11.9710170,
+  "tags": {
+    "artist_name": "Johan Axel Wetterlund",
+    "artwork_type": "sculpture",
+    "name": "Lejon",
+    "tourism": "artwork",
+    "website": "https://goteborgkonst.se/artwork/lejon"
+  }
+},
+{
+  "type": "node",
+  "id": 9908198350,
+  "lat": 57.6987259,
+  "lon": 11.9712533,
+  "tags": {
+    "artist_name": "Johan Axel Wetterlund",
+    "artwork_type": "sculpture",
+    "name": "Lejon",
+    "tourism": "artwork",
+    "website": "https://goteborgkonst.se/artwork/lejon"
+  }
+},
+{
+  "type": "node",
+  "id": 10029300279,
+  "lat": 57.7005368,
+  "lon": 11.9533438,
+  "tags": {
+    "artwork_type": "bust",
+    "inscription": "Sjöman Agitator Arbetarledare",
+    "name": "Charles Lindley",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 10238875558,
+  "lat": 57.7031837,
+  "lon": 11.9705968,
+  "tags": {
+    "check_date": "2022-12-04",
+    "fee": "no",
+    "tourism": "gallery"
+  }
+},
+{
+  "type": "node",
+  "id": 10701507911,
+  "lat": 57.7049070,
+  "lon": 11.9660717,
+  "tags": {
+    "artwork_type": "sculpture",
+    "name": "Oraklet",
+    "panoramax": "ed29a43f-1850-42dc-a439-590fb4ed8077",
+    "panoramax:0": "4f3e9695-435f-4009-90bb-4db8a6789590",
+    "panoramax:1": "aa425e5b-4a4e-4079-9122-f417c1a88fb0",
+    "tourism": "artwork",
+    "website": "https://sv.wikipedia.org/wiki/Lista_%C3%B6ver_offentlig_konst_i_G%C3%B6teborg"
+  }
+},
+{
+  "type": "node",
+  "id": 10837824305,
+  "lat": 57.6952302,
+  "lon": 11.9584357,
+  "tags": {
+    "artwork_type": "mural",
+    "name": "Artscape: Kalouf",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 10837828505,
+  "lat": 57.6984681,
+  "lon": 11.9782356,
+  "tags": {
+    "name": "Artspace: Rubin",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 10837845205,
+  "lat": 57.7040880,
+  "lon": 11.9693390,
+  "tags": {
+    "name": "Artspace: Koralie Och Supakitch",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 10840020905,
+  "lat": 57.6982040,
+  "lon": 11.9788553,
+  "tags": {
+    "artwork_type": "mural",
+    "name": "Artspace: Rubin",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 10860694278,
+  "lat": 57.7027006,
+  "lon": 11.9724046,
+  "tags": {
+    "artist_name": "Artur Johansson",
+    "artwork_type": "bust",
+    "height": "2.03",
+    "material": "stone",
+    "name": "Olof Wijk",
+    "name:sv": "Olof Wijk",
+    "start_date": "1956",
+    "tourism": "artwork",
+    "website": "https://goteborgkonst.se/artwork/olof-wijk",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 10860712715,
+  "lat": 57.6979157,
+  "lon": 11.9613598,
+  "tags": {
+    "artist_name": "Johan Malmström",
+    "artwork_type": "statue",
+    "height": "1.8",
+    "material": "bronze",
+    "name": "Aktivisten",
+    "name:sv": "Aktivisten",
+    "start_date": "2021",
+    "tourism": "artwork",
+    "website": "https://goteborgkonst.se/artwork/aktivisten",
+    "wheelchair": "yes"
+  }
+},
+{
+  "type": "node",
+  "id": 10944215996,
+  "lat": 57.7007212,
+  "lon": 11.9534052,
+  "tags": {
+    "artwork_type": "bust",
+    "inscription": "Så lades grunden till det verk som danats",
+    "name": "Göteborgs Arbetarförening 1866-1966",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 11005552675,
+  "lat": 57.6997032,
+  "lon": 11.9530817,
+  "tags": {
+    "artwork_type": "statue",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 11005552676,
+  "lat": 57.6997403,
+  "lon": 11.9530869,
+  "tags": {
+    "artwork_type": "statue",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 11005552677,
+  "lat": 57.6997564,
+  "lon": 11.9530275,
+  "tags": {
+    "artwork_type": "statue",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 11005552678,
+  "lat": 57.6997299,
+  "lon": 11.9529808,
+  "tags": {
+    "artwork_type": "statue",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 11005552679,
+  "lat": 57.6996963,
+  "lon": 11.9530107,
+  "tags": {
+    "artwork_type": "statue",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 11005552684,
+  "lat": 57.7007367,
+  "lon": 11.9535204,
+  "tags": {
+    "artwork_type": "bust",
+    "inscription": "Hjalmar Branting 1860-1925",
+    "name": "Hjalmar Branting",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 12050697645,
+  "lat": 57.7041970,
+  "lon": 11.9688285,
+  "tags": {
+    "artwork_type": "statue",
+    "name": "Nike's Göteborg",
+    "panoramax": "051957a0-9ae6-45a7-8d7f-8e957881d551",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 12887110652,
+  "lat": 57.7022750,
+  "lon": 11.9727064,
+  "tags": {
+    "artwork_type": "statue",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 13344722316,
+  "lat": 57.6973361,
+  "lon": 11.9744345,
+  "tags": {
+    "artwork_type": "statue",
+    "tourism": "artwork"
+  }
+},
+{
+  "type": "node",
+  "id": 13755632686,
+  "lat": 57.6994031,
+  "lon": 11.9680576,
+  "tags": {
+    "check_date": "2026-04-20",
+    "name": "Kc galleri",
+    "tourism": "gallery"
+  }
+},
+{
+  "type": "node",
+  "id": 13809369271,
+  "lat": 57.6991052,
+  "lon": 11.9642549,
+  "tags": {
+    "historic": "memorial",
+    "material": "metal",
+    "memorial": "plaque",
+    "name": "GAIS - minnesplakett",
+    "note": "https://www.gais.se/nyheter/gais-avtacker-minnesplakett-pa-storgatan7-den-11-e-mars",
+    "start_date": "2024-03-11"
+  }
+},
+{
+  "type": "way",
+  "id": 32871212,
+  "center": {
+    "lat": 57.6960075,
+    "lon": 11.9553420
+  },
+  "tags": {
+    "building": "tower",
+    "building:condition": "preserved",
+    "building:fireproof": "yes",
+    "contact:website": "http://www.skansenkronan.se",
+    "heritage": "yes",
+    "historic": "tower",
+    "man_made": "tower",
+    "name": "Skansen Kronan",
+    "opening_hours": "We-Fr 10:00-14:00",
+    "start_date": "1698",
+    "tower:type": "defensive",
+    "wheelchair": "no",
+    "wikidata": "Q1570303",
+    "wikipedia": "sv:Skansen Kronan"
+  }
+},
+{
+  "type": "way",
+  "id": 41604957,
+  "center": {
+    "lat": 57.7021678,
+    "lon": 11.9569149
+  },
+  "tags": {
+    "barrier": "city_wall",
+    "historic": "citywalls",
+    "material": "stone",
+    "name": "Bastionen Carolus Rex"
+  }
+},
+{
+  "type": "way",
+  "id": 194541151,
+  "center": {
+    "lat": 57.6986852,
+    "lon": 11.9552416
+  },
+  "tags": {
+    "highway": "pedestrian",
+    "lit": "yes",
+    "name": "Haga Nygata",
+    "smoothness": "intermediate",
+    "surface": "sett",
+    "tourism": "attraction"
+  }
+},
+{
+  "type": "way",
+  "id": 269132346,
+  "center": {
+    "lat": 57.6983379,
+    "lon": 11.9595812
+  },
+  "tags": {
+    "highway": "pedestrian",
+    "lit": "yes",
+    "name": "Haga Nygata",
+    "smoothness": "intermediate",
+    "surface": "sett",
+    "tourism": "attraction"
+  }
+},
+{
+  "type": "way",
+  "id": 269132350,
+  "center": {
+    "lat": 57.6984074,
+    "lon": 11.9579011
+  },
+  "tags": {
+    "highway": "pedestrian",
+    "lit": "yes",
+    "name": "Haga Nygata",
+    "surface": "sett",
+    "tourism": "attraction"
+  }
+},
+{
+  "type": "way",
+  "id": 1050517554,
+  "center": {
+    "lat": 57.7045094,
+    "lon": 11.9696082
+  },
+  "tags": {
+    "artist:wikidata": "Q4992397",
+    "artist_name": "John Börjeson",
+    "height": "11",
+    "historic": "memorial",
+    "inscription": "Åhr 1607 then 21 augusti underskreff iagh Götheborgs previlegier Gudh alsmechtigh latte var skett Gudh till äre och pris och thette landh och konunge Rike till gagn och goda. Amen.",
+    "loc_name": "Kopparmärra",
+    "material": "bronze",
+    "memorial": "statue",
+    "name": "Karl IX:s ryttarstaty",
+    "name:sv": "Karl IX:s ryttarstaty",
+    "start_date": "1904",
+    "statue": "equestrian",
+    "subject:wikidata": "Q52939",
+    "subject:wikipedia": "sv:Karl IX",
+    "website": "https://goteborgkonst.se/artwork/karl-den-ix-ryttarstaty-kopparmarra",
+    "wikidata": "Q10543690",
+    "wikipedia": "sv:Karl IX:s ryttarstaty i Göteborg"
+  }
+},
+{
+  "type": "way",
+  "id": 1125800904,
+  "center": {
+    "lat": 57.7069798,
+    "lon": 11.9665457
+  },
+  "tags": {
+    "artwork:material": "stone",
+    "artwork_type": "mosaic",
+    "description:en": "showing the outline of the, then, town of Gothenburg in the year of 1644",
+    "location": "surface",
+    "name": "Göteborg Anno 1644",
+    "tourism": "artwork"
+  }
+}
+
+  ]
+}
