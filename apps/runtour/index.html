@@ -29,6 +29,34 @@
         </div>
         <p class="hint" id="course-stats" hidden></p>
         <p class="hint" id="hint">Upload a GPX of the course you plan to run.</p>
+        <details id="generate-section">
+          <summary>Generate a course instead</summary>
+          <div class="row">
+            <button id="set-start">Set start on map</button>
+            <label class="control len-control">
+              <span>Length km</span>
+              <input type="number" id="gen-length" value="8" min="1" max="42" step="0.5" />
+            </label>
+          </div>
+          <label class="control">
+            <span>More places ↔ more direct</span>
+            <input type="range" id="gen-places" min="0" max="100" value="50" />
+          </label>
+          <label class="control">
+            <span>Pedestrian only ↔ roads too</span>
+            <input type="range" id="gen-pedestrian" min="0" max="100" value="30" />
+          </label>
+          <label class="control">
+            <span>Historic centre ↔ outskirts too</span>
+            <input type="range" id="gen-centre" min="0" max="100" value="50" />
+          </label>
+          <div class="row">
+            <button id="gen-run" disabled>Generate</button>
+            <button id="gen-cancel" hidden>Cancel</button>
+            <button id="gen-use" hidden>Use as course</button>
+          </div>
+          <p class="hint" id="gen-status" hidden></p>
+        </details>
         <div class="row" id="places-row" hidden>
           <label class="control lang-control">
             <span>Local Wikipedia</span>

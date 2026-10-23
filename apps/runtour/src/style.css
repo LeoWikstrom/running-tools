@@ -284,3 +284,30 @@ button {
   color: white;
   border: none;
 }
+
+#generate-section {
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  padding: 8px;
+  margin: 8px 0;
+}
+
+#generate-section summary {
+  cursor: pointer;
+}
+
+#generate-section input[type='range'] {
+  width: 100%;
+}
+
+.len-control {
+  flex: 0 0 90px;
+  margin-bottom: 0;
+}
+
+#gen-run,
+#gen-use {
+  background: var(--accent);
+  color: white;
+  border: none;
+}

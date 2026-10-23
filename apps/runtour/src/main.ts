@@ -13,6 +13,7 @@ import {
   type Tour,
 } from '@running/core/tour/types';
 import { fetchCandidates, searchPlacesByName } from './places';
+import { generateCourse, type GeneratedCourse } from './generate';
 import {
   startGpsPreview,
   startSimulatedPreview,
@@ -580,6 +581,108 @@ previewBtn.addEventListener('click', () => {
       );
   previewBtn.textContent = 'Stop preview';
   previewNote.hidden = !previewGps.checked;
+});
+
+// --- Course generation: start point + length + sliders → a loop over places.
+
+const setStartBtn = el<HTMLButtonElement>('set-start');
+const genLength = el<HTMLInputElement>('gen-length');
+const genPlaces = el<HTMLInputElement>('gen-places');
+const genPedestrian = el<HTMLInputElement>('gen-pedestrian');
+const genCentre = el<HTMLInputElement>('gen-centre');
+const genRun = el<HTMLButtonElement>('gen-run');
+const genCancel = el<HTMLButtonElement>('gen-cancel');
+const genUse = el<HTMLButtonElement>('gen-use');
+const genStatus = el<HTMLParagraphElement>('gen-status');
+
+let genStart: { lat: number; lon: number } | null = null;
+let genStartMarker: L.CircleMarker | null = null;
+let settingStart = false;
+let genPreviewLine: L.Polyline | null = null;
+let generated: GeneratedCourse | null = null;
+let generation: ReturnType<typeof generateCourse> | null = null;
+
+function setGenStatus(text: string): void {
+  genStatus.textContent = text;
+  genStatus.hidden = text.length === 0;
+}
+
+setStartBtn.addEventListener('click', () => {
+  settingStart = !settingStart;
+  setStartBtn.textContent = settingStart ? 'Tap the map…' : 'Set start on map';
+});
+
+map.on('click', (e: L.LeafletMouseEvent) => {
+  if (!settingStart) return;
+  settingStart = false;
+  setStartBtn.textContent = 'Set start on map';
+  genStart = { lat: e.latlng.lat, lon: e.latlng.lng };
+  if (!genStartMarker) {
+    genStartMarker = L.circleMarker(e.latlng, { radius: 8, color: '#2d7a4f', fillOpacity: 1 });
+    genStartMarker.addTo(map);
+  } else {
+    genStartMarker.setLatLng(e.latlng);
+  }
+  genRun.disabled = false;
+  setGenStatus('Start set. Generate when ready.');
+});
+
+genRun.addEventListener('click', () => {
+  if (!genStart) return;
+  genRun.disabled = true;
+  genCancel.hidden = false;
+  genUse.hidden = true;
+  generated = null;
+  generation = generateCourse(
+    {
+      start: genStart,
+      targetLengthM: Number(genLength.value) * 1000,
+      localLang: langInput.value.trim().toLowerCase(),
+      placesSlider: Number(genPlaces.value),
+      pedestrianSlider: Number(genPedestrian.value),
+      centreSlider: Number(genCentre.value),
+    },
+    (text, fraction) => setGenStatus(`${text} ${(fraction * 100).toFixed(0)} %`),
+  );
+  generation.promise
+    .then((course) => {
+      generated = course;
+      genPreviewLine?.remove();
+      genPreviewLine = L.polyline(course.points, {
+        color: '#2d7a4f',
+        weight: 4,
+        dashArray: '6 6',
+      }).addTo(map);
+      map.fitBounds(genPreviewLine.getBounds(), { padding: [24, 24] });
+      genUse.hidden = false;
+      setGenStatus(
+        `${(course.lengthM / 1000).toFixed(2)} km touching ${course.collected.length} places: ` +
+          course.collected.map((c) => c.name).join(', '),
+      );
+    })
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message !== 'cancelled') setGenStatus(message);
+      else setGenStatus('');
+    })
+    .finally(() => {
+      genRun.disabled = genStart === null;
+      genCancel.hidden = true;
+      generation = null;
+    });
+});
+
+genCancel.addEventListener('click', () => generation?.cancel());
+
+genUse.addEventListener('click', () => {
+  if (!generated) return;
+  genPreviewLine?.remove();
+  genPreviewLine = null;
+  const points: GpxPoint[] = generated.points.map(([lat, lon]) => ({ lat, lon, ele: null }));
+  setCourse('Generated course', points);
+  genUse.hidden = true;
+  render();
+  setStatus('Course set. Now Find places along it.');
 });
 
 const shelf = initShelf(el<HTMLDivElement>('shelf'), applyTour, setStatus);
