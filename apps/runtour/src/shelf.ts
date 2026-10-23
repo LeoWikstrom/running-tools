@@ -7,6 +7,7 @@ import {
   native,
   playFile,
   saveTourToPhone,
+  startRun,
   stopPlayback,
   synthesize,
 } from './native';
@@ -90,6 +91,11 @@ export function initShelf(
 
       const row = document.createElement('div');
       row.className = 'row';
+      const run = document.createElement('button');
+      run.textContent = 'Start run';
+      run.className = 'start-run';
+      run.addEventListener('click', () => startRun(info.id));
+      row.appendChild(run);
       const open = document.createElement('button');
       open.textContent = 'Open';
       open.addEventListener('click', () => {

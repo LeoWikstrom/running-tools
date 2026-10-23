@@ -8,6 +8,7 @@ interface RunTourBridge {
   fetchText(url: string, cb: number): void;
   playFile(tourId: string, filename: string): boolean;
   stopPlayback(): void;
+  startRun(tourId: string): void;
 }
 
 declare global {
@@ -84,6 +85,10 @@ export function playFile(tourId: string, filename: string): boolean {
 
 export function stopPlayback(): void {
   native?.stopPlayback();
+}
+
+export function startRun(tourId: string): void {
+  native?.startRun(tourId);
 }
 
 export function audioFilename(placeId: string): string {

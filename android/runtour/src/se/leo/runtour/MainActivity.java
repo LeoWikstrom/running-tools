@@ -249,6 +249,14 @@ public class MainActivity extends Activity {
             return true;
         }
 
+        /** Opens the native run screen, which starts the GPS service. */
+        @JavascriptInterface
+        public void startRun(String tourId) {
+            Intent intent = new Intent(MainActivity.this, RunActivity.class)
+                    .putExtra(RunActivity.EXTRA_TOUR_ID, tourId);
+            startActivity(intent);
+        }
+
         @JavascriptInterface
         public void stopPlayback() {
             runOnUiThread(() -> {
