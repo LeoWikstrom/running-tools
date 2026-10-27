@@ -15,6 +15,9 @@ interface TranslatorStatic {
 
 const api = (globalThis as { Translator?: TranslatorStatic }).Translator;
 
+/** Whether this browser offers on-device translation at all. */
+export const translatorAvailable = api !== undefined;
+
 const translators = new Map<string, Promise<BrowserTranslator>>();
 
 export async function translateBestEffort(

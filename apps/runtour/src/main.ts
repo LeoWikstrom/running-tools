@@ -29,6 +29,7 @@ import {
   type PreviewPlace,
 } from './preview';
 import { native, saveTourToPhone } from './native';
+import { translatorAvailable } from './translate';
 import { initShelf } from './shelf';
 import { fetchPlaceText, placeDisplayName, type PlaceText } from './texts';
 import { initSheet } from './ui/sheet';
@@ -36,6 +37,12 @@ import { toast } from './ui/toast';
 
 const narrationLang = (): string =>
   (document.getElementById('narration-lang') as HTMLSelectElement).value;
+
+const nativeOnly = (): boolean =>
+  (document.getElementById('native-only') as HTMLInputElement).checked;
+
+const hasNarrationPage = (c: { wikipedia?: { lang: string }; wikipedias?: { lang: string }[] }): boolean =>
+  [c.wikipedia, ...(c.wikipedias ?? [])].some((w) => w?.lang === narrationLang());
 
 const sheet = document.getElementById('sheet')!;
 const handle = document.getElementById('sheet-handle')!;
@@ -357,13 +364,15 @@ function render(): void {
   toggleRow.hidden = !any && candidates.length === 0;
   textControls.hidden = !any;
   previewControls.hidden = !any;
+  el<HTMLDivElement>('list-lang-row').hidden = !any;
   searchRow.hidden = course === null;
 }
 
 function recompute(): void {
   if (!course) return;
   if (candidates.length > 0) {
-    places = buildPlaces(course.lats, course.lons, candidates, {}, removedIds);
+    const pool = nativeOnly() ? candidates.filter(hasNarrationPage) : candidates;
+    places = buildPlaces(course.lats, course.lons, pool, {}, removedIds);
   } else {
     places = places.filter((p) => !removedIds.has(p.id));
   }
@@ -371,7 +380,54 @@ function recompute(): void {
   if (allPlaces().length > 0) setStatus(`${allPlaces().length} places along the course.`);
 }
 
-el<HTMLSelectElement>('narration-lang').addEventListener('change', () => render());
+/** Swap every fetched text to the new narration language in one go; places
+    without a Wikipedia page keep their hand-written text. */
+let relanging = false;
+async function relangTexts(): Promise<void> {
+  const list = allPlaces().filter((p) => (texts.get(p.id)?.text.length ?? 0) > 0);
+  if (list.length === 0 || relanging) return;
+  relanging = true;
+  const lang = narrationLang();
+  let done = 0;
+  for (const p of list) {
+    const got = await fetchPlaceText(p, lang, targetSeconds()).catch(() => null);
+    if (got) texts.set(p.id, got);
+    done++;
+    setStatus(`Switching texts to ${lang} ${done}/${list.length}…`);
+  }
+  relanging = false;
+  render();
+  setStatus(`Texts switched to ${lang}.`);
+  toast(`Texts switched to ${lang}.`);
+}
+
+// The narration select exists twice (panel top and above the place list);
+// changing either updates both and swaps the texts.
+const narrationSelects = ['narration-lang', 'narration-lang-list'].map((id) =>
+  el<HTMLSelectElement>(id),
+);
+for (const select of narrationSelects) {
+  select.addEventListener('change', () => {
+    for (const other of narrationSelects) other.value = select.value;
+    if (nativeOnly()) recompute();
+    else render();
+    void relangTexts();
+  });
+}
+
+const nativeOnlyBox = el<HTMLInputElement>('native-only');
+const nativeOnlyInfo = el<HTMLButtonElement>('native-only-info');
+nativeOnlyInfo.hidden = !translatorAvailable;
+nativeOnlyInfo.addEventListener('click', (e) => {
+  e.preventDefault();
+  toast(
+    'Ticked, only places whose Wikipedia exists in the narration language are included — no machine translations are used.',
+    6000,
+  );
+});
+nativeOnlyBox.addEventListener('change', () => {
+  if (candidates.length > 0) recompute();
+});
 
 toggleMarkers.addEventListener('change', () => {
   if (toggleMarkers.checked) markerLayer.addTo(map);
@@ -610,8 +666,19 @@ nameSearch.addEventListener('keydown', (e) => {
 const previewControls = el<HTMLDivElement>('preview-controls');
 const paceInput = el<HTMLInputElement>('pace-input');
 const previewFast = el<HTMLInputElement>('preview-fast');
+previewFast.addEventListener('change', () => {
+  preview?.setSpeed?.(previewFast.checked ? 10 : 1);
+});
 const previewGps = el<HTMLInputElement>('preview-gps');
 const previewBtn = el<HTMLButtonElement>('preview-btn');
+const previewPause = el<HTMLButtonElement>('preview-pause');
+let previewPaused = false;
+previewPause.addEventListener('click', () => {
+  if (!preview) return;
+  previewPaused = !previewPaused;
+  preview.setPaused(previewPaused);
+  previewPause.textContent = previewPaused ? 'Resume' : 'Pause';
+});
 const previewNote = el<HTMLParagraphElement>('preview-note');
 
 let preview: PreviewHandle | null = null;
@@ -639,6 +706,9 @@ function stopPreview(): void {
   runnerMarker = null;
   previewBtn.textContent = 'Preview run';
   previewNote.hidden = true;
+  previewPause.hidden = true;
+  previewPaused = false;
+  previewPause.textContent = 'Pause';
 }
 
 previewBtn.addEventListener('click', () => {
@@ -687,6 +757,7 @@ previewBtn.addEventListener('click', () => {
       );
   previewBtn.textContent = 'Stop preview';
   previewNote.hidden = !previewGps.checked;
+  previewPause.hidden = false;
 });
 
 // --- Course generation: start point + length + sliders → a loop over places.
@@ -832,6 +903,7 @@ genRun.addEventListener('click', () => {
       pedestrianSlider: Number(genPedestrian.value),
       centreSlider: Number(genCentre.value),
       twistSlider: Number(genTwists.value),
+      requireLang: nativeOnly() ? narrationLang() : null,
     },
     (text, fraction) => setGenStatus(`${text} ${(fraction * 100).toFixed(0)} %`),
   );

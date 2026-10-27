@@ -26,6 +26,8 @@ export interface GenerateParams {
   pedestrianSlider: number;
   centreSlider: number;
   twistSlider: number;
+  /** Only route over places with a Wikipedia page in this language. */
+  requireLang: string | null;
 }
 
 export interface GeneratedCourse {
@@ -100,6 +102,11 @@ async function placesAround(
       : await fetchAreaCandidates(center, radiusM, p.localLang);
   return candidates
     .filter((c) => !isExcludedType(c))
+    .filter(
+      (c) =>
+        !p.requireLang ||
+        [c.wikipedia, ...(c.wikipedias ?? [])].some((w) => w?.lang === p.requireLang),
+    )
     .map((c) => ({
       id: c.wikidataId ?? `name:${c.name.toLowerCase()}`,
       name: c.name,

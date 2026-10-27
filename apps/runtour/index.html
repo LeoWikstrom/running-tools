@@ -26,21 +26,20 @@
               <option value="it">Italiano</option>
             </select>
           </label>
-        </div>
-        <div class="row" id="gpx-row">
-          <label class="control">
-            <span>Course GPX</span>
-            <input type="file" id="gpx-input" accept=".gpx,application/gpx+xml" />
-          </label>
-          <label class="control">
-            <span>Tour JSON</span>
-            <input type="file" id="tour-input" accept=".json,application/json" />
+          <label class="control grow-control">
+            <span>Clip length: <output id="target-output">40</output> s</span>
+            <input type="range" id="target-seconds" min="20" max="120" step="5" value="40" />
           </label>
         </div>
+        <label class="check"
+          ><input type="checkbox" id="native-only" /> Only places with sources in this language
+          <button id="native-only-info" class="info" aria-label="About this option" hidden>ⓘ</button>
+        </label>
         <p class="hint" id="course-stats" hidden></p>
-        <p class="hint" id="hint">Upload a GPX of the course you plan to run.</p>
-        <details id="generate-section">
-          <summary>Generate a course instead</summary>
+        <p class="hint" id="hint">
+          Long-press the map (or Set start) to place a start, then Generate.
+        </p>
+        <div id="generate-section">
           <div class="row">
             <button id="set-start">Set start</button>
             <button id="set-finish">Set finish</button>
@@ -73,7 +72,7 @@
             <button id="gen-cancel" hidden>Cancel</button>
           </div>
           <p class="hint" id="gen-status" hidden></p>
-          <div class="row">
+          <div class="row area-row">
             <label class="control len-control">
               <span>Area km</span>
               <input type="number" id="area-radius" value="3" min="1" max="10" step="0.5" />
@@ -86,20 +85,29 @@
           </p>
           <p class="hint" id="area-status" hidden></p>
           <ul id="area-list" hidden></ul>
-        </details>
-        <div class="row" id="places-row" hidden>
-          <label class="control lang-control">
-            <span>Local Wikipedia</span>
-            <input type="text" id="lang-input" value="sv" size="3" maxlength="7" />
-          </label>
-          <button id="find-places">Find places</button>
         </div>
+        <details id="upload-section">
+          <summary>Upload a course instead</summary>
+          <div class="row" id="gpx-row">
+            <label class="control">
+              <span>Course GPX</span>
+              <input type="file" id="gpx-input" accept=".gpx,application/gpx+xml" />
+            </label>
+            <label class="control">
+              <span>Tour JSON</span>
+              <input type="file" id="tour-input" accept=".json,application/json" />
+            </label>
+          </div>
+          <div class="row" id="places-row" hidden>
+            <label class="control lang-control">
+              <span>Local Wikipedia</span>
+              <input type="text" id="lang-input" value="sv" size="3" maxlength="7" />
+            </label>
+            <button id="find-places">Find places</button>
+          </div>
+        </details>
         <p class="hint" id="status" hidden></p>
         <div id="text-controls" hidden>
-          <label class="control">
-            <span>Clip length: <output id="target-output">40</output> s</span>
-            <input type="range" id="target-seconds" min="20" max="120" step="5" value="40" />
-          </label>
           <div class="row">
             <button id="fetch-texts">Fetch texts</button>
             <button id="export-tour">Save tour.json</button>
@@ -116,6 +124,7 @@
             <label class="check"><input type="checkbox" id="preview-fast" /> ×10</label>
             <label class="check"><input type="checkbox" id="preview-gps" /> real GPS</label>
             <button id="preview-btn">Preview run</button>
+            <button id="preview-pause" hidden>Pause</button>
           </div>
           <p class="hint" id="preview-note" hidden>
             The browser preview needs the screen on; the Android app runs with it off.
@@ -127,6 +136,16 @@
           <button id="search-btn">Search</button>
         </div>
         <ul id="search-results" hidden></ul>
+        <div class="row" id="list-lang-row" hidden>
+          <label class="control lang-control">
+            <span>Narration</span>
+            <select id="narration-lang-list">
+              <option value="en" selected>English</option>
+              <option value="sv">Svenska</option>
+              <option value="it">Italiano</option>
+            </select>
+          </label>
+        </div>
         <ol id="place-list"></ol>
       </section>
     </div>

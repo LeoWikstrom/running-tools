@@ -21,6 +21,10 @@ export interface PreviewCallbacks {
 
 export interface PreviewHandle {
   stop(): void;
+  /** Simulated previews only: change the speed-up factor mid-run. */
+  setSpeed?(factor: number): void;
+  /** Freeze the runner and the voice without losing the position. */
+  setPaused(paused: boolean): void;
 }
 
 const TICK_MS = 500;
@@ -58,11 +62,13 @@ export function startSimulatedPreview(
   }
   const total = cum[cum.length - 1]!;
   const rt = new TourRuntime(lats, lons, places, DEFAULT_RUNTIME_SETTINGS);
-  const metresPerSecond = (1000 / paceSecPerKm) * speedFactor;
+  let factor = speedFactor;
+  const metresPerSecond = (): number => (1000 / paceSecPerKm) * factor;
 
   let d = 0;
   let t = 0;
   let stopped = false;
+  let paused = false;
 
   const pointAt = (dist: number): [number, number] => {
     let lo = 0;
@@ -93,9 +99,9 @@ export function startSimulatedPreview(
   };
 
   const timer = setInterval(() => {
-    if (stopped) return;
+    if (stopped || paused) return;
     t += TICK_MS / 1000;
-    d = Math.min(total, d + metresPerSecond * (TICK_MS / 1000));
+    d = Math.min(total, d + metresPerSecond() * (TICK_MS / 1000));
     const [lat, lon] = pointAt(d);
     handleEvents(rt.update({ t, lat, lon }));
     cb.onPosition(lat, lon, rt.dNow(), rt.isOffCourse());
@@ -111,7 +117,19 @@ export function startSimulatedPreview(
     if ('speechSynthesis' in window) speechSynthesis.cancel();
   }
 
-  return { stop };
+  return {
+    stop,
+    setSpeed(f: number): void {
+      factor = f;
+    },
+    setPaused(p: boolean): void {
+      paused = p;
+      if ('speechSynthesis' in window) {
+        if (p) speechSynthesis.pause();
+        else speechSynthesis.resume();
+      }
+    },
+  };
 }
 
 /**
@@ -127,6 +145,7 @@ export function startGpsPreview(
 ): PreviewHandle {
   const rt = new TourRuntime(lats, lons, places, DEFAULT_RUNTIME_SETTINGS);
   let stopped = false;
+  let paused = false;
 
   const handleEvents = (events: RuntimeEvent[]): void => {
     for (const ev of events) {
@@ -146,7 +165,7 @@ export function startGpsPreview(
 
   const watch = navigator.geolocation.watchPosition(
     (pos) => {
-      if (stopped) return;
+      if (stopped || paused) return;
       handleEvents(
         rt.update({ t: pos.timestamp / 1000, lat: pos.coords.latitude, lon: pos.coords.longitude }),
       );
@@ -161,6 +180,13 @@ export function startGpsPreview(
       stopped = true;
       navigator.geolocation.clearWatch(watch);
       if ('speechSynthesis' in window) speechSynthesis.cancel();
+    },
+    setPaused(p: boolean): void {
+      paused = p;
+      if ('speechSynthesis' in window) {
+        if (p) speechSynthesis.pause();
+        else speechSynthesis.resume();
+      }
     },
   };
 }
