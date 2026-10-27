@@ -1,9 +1,12 @@
 import { dedupeCandidates } from '@running/core/poi/pipeline';
 import { interestScore, isExcludedType } from '@running/core/poi/score';
+import type { PlaceCandidate } from '@running/core/poi/types';
+import { findCoveringArea, loadAreaPlaces } from '@running/core/net/areaStore';
 import { fetchOsmPlaces, elementsToCandidates } from '@running/core/poi/osm';
 import { geosearch, pagesToCandidates } from '@running/core/poi/wikipedia';
 import { fetchItemsAround, itemsToCandidates } from '@running/core/poi/wikidata';
-import { getNetwork } from '@running/core/net/overpass';
+import { getNetwork, type OverpassResponse } from '@running/core/net/overpass';
+import { haversineMeters } from '@running/core/geo';
 import type { TourSearchPlace, TourWeights } from '@running/core/search/tourBeam';
 import type { GenerateReply, GenerateRequest } from './generate.worker';
 import GenerateWorker from './generate.worker?worker';
@@ -14,19 +17,36 @@ const GEOSEARCH_MAX_M = 10_000;
 
 export interface GenerateParams {
   start: { lat: number; lon: number };
+  /** A finish point makes the course point-to-point; null means a loop. */
+  end: { lat: number; lon: number } | null;
   targetLengthM: number;
   localLang: string;
-  /** 0..100 each: more places↔direct, pedestrian↔roads too, centre↔outskirts. */
+  /** 0..100 each: more places↔direct, pedestrian↔roads too, centre↔outskirts, twisty↔circular. */
   placesSlider: number;
   pedestrianSlider: number;
   centreSlider: number;
+  twistSlider: number;
 }
 
 export interface GeneratedCourse {
   points: [number, number][];
   lengthM: number;
   score: number;
+  edges: number[];
   collected: { id: string; name: string; d: number; score: number }[];
+  /** Set on a fresh generation; refineCourse keeps the caller's own. */
+  context?: GenerationContext;
+}
+
+/** Everything needed to re-improve the generated course later (same graph). */
+export interface GenerationContext {
+  response: OverpassResponse;
+  start: { lat: number; lon: number };
+  end: { lat: number; lon: number } | null;
+  places: TourSearchPlace[];
+  targetLengthM: number;
+  weights: Partial<TourWeights>;
+  edges: number[];
 }
 
 function sliderWeights(p: GenerateParams): Partial<TourWeights> {
@@ -38,23 +58,47 @@ function sliderWeights(p: GenerateParams): Partial<TourWeights> {
     penalty: 0.02 + ((100 - p.pedestrianSlider) / 100) * 0.12,
     // Historic centre: ground far from the places' centroid costs.
     centroid: ((100 - p.centreSlider) / 100) * 0.06,
+    // Circular: every junction direction change costs, so the loop comes out
+    // rounder with fewer street changes — and crossing its own path (a little
+    // loop around a block) costs like half a decent place.
+    turn: (p.twistSlider / 100) * 6,
+    crossing: (p.twistSlider / 100) * 25,
   };
 }
 
-async function placesAround(p: GenerateParams, radiusM: number): Promise<TourSearchPlace[]> {
+/** The three sources around one point, deduped — also what an area download stores. */
+export async function fetchAreaCandidates(
+  center: { lat: number; lon: number },
+  radiusM: number,
+  localLang: string,
+): Promise<PlaceCandidate[]> {
   const r = Math.min(radiusM, GEOSEARCH_MAX_M);
-  const langs = p.localLang && p.localLang !== 'en' ? ['en', p.localLang] : ['en'];
+  const langs = localLang && localLang !== 'en' ? ['en', localLang] : ['en'];
   const batches = await Promise.allSettled([
     ...langs.map(async (lang) =>
-      pagesToCandidates(lang, await geosearch(lang, p.start.lat, p.start.lon, r)),
+      pagesToCandidates(lang, await geosearch(lang, center.lat, center.lon, r)),
     ),
-    (async () => itemsToCandidates(await fetchItemsAround(p.start.lat, p.start.lon, r / 1000)))(),
     (async () =>
-      elementsToCandidates(await fetchOsmPlaces([p.start.lat], [p.start.lon], r)))(),
+      itemsToCandidates(await fetchItemsAround(center.lat, center.lon, r / 1000, { wikiLangs: langs })))(),
+    (async () => elementsToCandidates(await fetchOsmPlaces([center.lat], [center.lon], r)))(),
   ]);
   const all = batches.flatMap((b) => (b.status === 'fulfilled' ? b.value : []));
   if (all.length === 0) throw new Error('No place source reachable. Are you online?');
-  return dedupeCandidates(all)
+  return dedupeCandidates(all);
+}
+
+async function placesAround(
+  p: GenerateParams,
+  center: { lat: number; lon: number },
+  radiusM: number,
+): Promise<TourSearchPlace[]> {
+  const area = await findCoveringArea(center, radiusM);
+  const stored = area ? await loadAreaPlaces(area.id) : undefined;
+  const candidates =
+    stored && stored.length > 0
+      ? stored.filter((c) => haversineMeters(center.lat, center.lon, c.lat, c.lon) <= radiusM)
+      : await fetchAreaCandidates(center, radiusM, p.localLang);
+  return candidates
     .filter((c) => !isExcludedType(c))
     .map((c) => ({
       id: c.wikidataId ?? `name:${c.name.toLowerCase()}`,
@@ -75,40 +119,42 @@ export function generateCourse(
 
   const promise = (async (): Promise<GeneratedCourse> => {
     // The start/finish radius of the plan: length/2 × 0.6, places a bit wider.
-    const radius = (params.targetLengthM / 2) * 0.6;
+    // Point-to-point: everything centres on the midpoint and the radius also
+    // has to cover both endpoints.
+    const separation = params.end
+      ? haversineMeters(params.start.lat, params.start.lon, params.end.lat, params.end.lon)
+      : 0;
+    if (separation > params.targetLengthM * 1.05) {
+      throw new Error('Start and finish are further apart than the course length.');
+    }
+    const center = params.end
+      ? {
+          lat: (params.start.lat + params.end.lat) / 2,
+          lon: (params.start.lon + params.end.lon) / 2,
+        }
+      : params.start;
+    const radius = (params.targetLengthM / 2) * 0.6 + separation / 2;
     onProgress('Fetching places…', 0.05);
-    const places = await placesAround(params, radius + 500);
+    const places = await placesAround(params, center, radius + 500);
     if (places.length === 0) {
       throw new Error('No places with interest ≥ 30 around here.');
     }
     if (cancelled) throw new Error('cancelled');
     onProgress(`Fetching the street network (${places.length} places found)…`, 0.15);
-    const network = await getNetwork(params.start, radius + 300, { headerTimeoutMs: 120_000 });
+    const network = await getNetwork(center, radius + 300, { headerTimeoutMs: 120_000 });
     if (cancelled) throw new Error('cancelled');
     onProgress('Searching for a loop…', 0.2);
 
-    return await new Promise<GeneratedCourse>((resolve, reject) => {
-      worker = new GenerateWorker();
-      worker.onmessage = (e: MessageEvent<GenerateReply>) => {
-        const msg = e.data;
-        if (msg.type === 'progress') {
-          onProgress('Searching for a loop…', 0.2 + msg.fraction * 0.8);
-        } else if (msg.type === 'result') {
-          resolve(msg);
-        } else {
-          reject(new Error(msg.message));
-        }
-      };
-      worker.onerror = (e) => reject(new Error(e.message));
-      const request: GenerateRequest = {
-        response: network.response,
-        start: params.start,
-        places,
-        targetLengthM: params.targetLengthM,
-        weights: sliderWeights(params),
-      };
-      worker.postMessage(request);
-    });
+    const request: GenerateRequest = {
+      response: network.response,
+      start: params.start,
+      end: params.end,
+      places,
+      targetLengthM: params.targetLengthM,
+      weights: sliderWeights(params),
+    };
+    const result = await runWorker(request, (w) => (worker = w), onProgress);
+    return { ...result, context: { ...request, edges: result.edges } };
   })();
 
   return {
@@ -118,4 +164,77 @@ export function generateCourse(
       worker?.terminate();
     },
   };
+}
+
+function runWorker(
+  request: GenerateRequest,
+  onWorker: (w: Worker) => void,
+  onProgress: (text: string, fraction: number) => void,
+): Promise<GeneratedCourse> {
+  return new Promise<GeneratedCourse>((resolve, reject) => {
+    const worker = new GenerateWorker();
+    onWorker(worker);
+    worker.onmessage = (e: MessageEvent<GenerateReply>) => {
+      const msg = e.data;
+      if (msg.type === 'progress') {
+        const text = msg.fraction >= 0.85 ? 'Polishing the loop…' : 'Searching for a loop…';
+        onProgress(text, 0.2 + msg.fraction * 0.8);
+      } else if (msg.type === 'result') {
+        worker.terminate();
+        resolve(msg);
+      } else {
+        worker.terminate();
+        reject(new Error(msg.message));
+      }
+    };
+    worker.onerror = (e) => {
+      worker.terminate();
+      reject(new Error(e.message));
+    };
+    worker.postMessage(request);
+  });
+}
+
+/** Re-improve an existing generated course — e.g. after a place was removed,
+    so a detour that only existed for it can straighten. */
+export async function refineCourse(
+  context: GenerationContext,
+  onProgress: (text: string, fraction: number) => void,
+): Promise<GeneratedCourse> {
+  return runWorker(
+    {
+      response: context.response,
+      start: context.start,
+      end: context.end,
+      places: context.places,
+      targetLengthM: context.targetLengthM,
+      weights: context.weights,
+      refineEdges: context.edges,
+      // Dropping a detour shortens the course; the search tolerance of ±5 %
+      // would veto exactly the straightening the refinement is for.
+      lengthToleranceFrac: 0.15,
+    },
+    () => {},
+    onProgress,
+  );
+}
+
+/** Full re-search on the stored network — for when local improvement cannot
+    restructure the course after a removal. */
+export async function regenerateCourse(
+  context: GenerationContext,
+  onProgress: (text: string, fraction: number) => void,
+): Promise<GeneratedCourse> {
+  return runWorker(
+    {
+      response: context.response,
+      start: context.start,
+      end: context.end,
+      places: context.places,
+      targetLengthM: context.targetLengthM,
+      weights: context.weights,
+    },
+    () => {},
+    onProgress,
+  );
 }

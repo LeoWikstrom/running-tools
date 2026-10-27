@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildGraph, snapToNode } from '../src/graph/build';
+import { otherNode } from '../src/graph/types';
 import type { OverpassNode, OverpassResponse, OverpassWay } from '../src/net/overpass';
 import {
   improveTourCourse,
@@ -88,6 +89,69 @@ function ringPlaces(): TourSearchPlace[] {
   }));
 }
 
+describe('corridor repeat: the other sidewalk is the same ground', () => {
+  // Two parallel 300 m paths 10 m apart, joined at both ends.
+  function twinResponse(): OverpassResponse {
+    const dLat = 10 / 111_195;
+    const nodes: OverpassNode[] = [];
+    for (let i = 0; i <= 6; i++) {
+      nodes.push({ type: 'node', id: 10 + i, lat: LAT0, lon: LON0 + (i * 50) / 111_195 / COS });
+      nodes.push({
+        type: 'node',
+        id: 20 + i,
+        lat: LAT0 + dLat,
+        lon: LON0 + (i * 50) / 111_195 / COS,
+      });
+    }
+    const path = { highway: 'footway' };
+    const ways: OverpassWay[] = [
+      { type: 'way', id: 1, nodes: [10, 11, 12, 13, 14, 15, 16], tags: path },
+      { type: 'way', id: 2, nodes: [20, 21, 22, 23, 24, 25, 26], tags: path },
+      { type: 'way', id: 3, nodes: [10, 20], tags: path },
+      { type: 'way', id: 4, nodes: [16, 26], tags: path },
+    ];
+    return { elements: [...ways, ...nodes] };
+  }
+
+  it('charges going out on one side and back on the other like a repeat', () => {
+    const g = buildGraph(twinResponse());
+    const s = snapToNode(g, LAT0, LON0);
+    // Walk the full loop: out on the south path, over, back on the north path.
+    const edges: number[] = [];
+    let node = s;
+    const visited = new Set<number>();
+    for (;;) {
+      visited.add(node);
+      let next = -1;
+      for (let k = g.adjOffset[node]!; k < g.adjOffset[node + 1]!; k++) {
+        const e = g.edges[g.adjEdge[k]!]!;
+        const v = otherNode(e, node);
+        if (!visited.has(v)) {
+          next = g.adjEdge[k]!;
+          break;
+        }
+      }
+      if (next < 0) break;
+      edges.push(next);
+      node = otherNode(g.edges[next]!, node);
+    }
+    // Close the loop back to the start.
+    for (let k = g.adjOffset[node]!; k < g.adjOffset[node + 1]!; k++) {
+      const e = g.edges[g.adjEdge[k]!]!;
+      if (otherNode(e, node) === s && !edges.includes(g.adjEdge[k]!)) {
+        edges.push(g.adjEdge[k]!);
+        break;
+      }
+    }
+    const target = 620;
+    const base = { interest: 1, penalty: 0, lengthDiff: 0, crowding: 0, centroid: 0, turn: 0, crossing: 0 };
+    const free = scoreTourCourse(g, edges, s, [], { ...base, repeat: 0 }, target);
+    const charged = scoreTourCourse(g, edges, s, [], { ...base, repeat: 0.1 }, target);
+    // The way back covers the way out's cells: ~300 m of repeat at 0.1/m.
+    expect(free.score - charged.score).toBeGreaterThan(0.1 * 200);
+  });
+});
+
 describe('snapPlacesToNodes', () => {
   it('snaps to the nearest node within 60 m and drops the rest', () => {
     const places = snapPlacesToNodes(graph, [
@@ -136,12 +200,77 @@ describe('tourBeamSearch on the synthetic grid', () => {
     expect(nastyLen / best.lengthM).toBeLessThan(0.35);
   });
 
+  it('the turn weight buys a rounder course: fewer junction direction changes', () => {
+    const countTurns = (c: (typeof courses)[number]): number => {
+      let turns = 0;
+      for (let i = 1; i < c.edges.length; i++) {
+        const a = graph.edges[c.edges[i - 1]!]!;
+        const b = graph.edges[c.edges[i]!]!;
+        // On the grid every edge is axis-aligned: a turn is a change of axis.
+        const aNS = a.lats[0] !== a.lats[a.lats.length - 1];
+        const bNS = b.lats[0] !== b.lats[b.lats.length - 1];
+        if (aNS !== bNS) turns++;
+      }
+      return turns;
+    };
+    const round = tourBeamSearch(graph, start, snapped, { ...options, weights: { turn: 6 } });
+    expect(round.length).toBeGreaterThan(0);
+    expect(countTurns(round[0]!)).toBeLessThan(countTurns(courses[0]!));
+  });
+
+  it('the crossing weight stops little loops: no node is visited twice', () => {
+    const smooth = tourBeamSearch(graph, start, snapped, {
+      ...options,
+      weights: { turn: 6, crossing: 25 },
+    });
+    expect(smooth.length).toBeGreaterThan(0);
+    const seen = new Set<number>([start]);
+    let node = start;
+    const edges = smooth[0]!.edges;
+    for (let i = 0; i < edges.length - 1; i++) {
+      node = otherNode(graph.edges[edges[i]!]!, node);
+      expect(seen.has(node)).toBe(false);
+      seen.add(node);
+    }
+  });
+
+  it('a finish node makes the course point-to-point', () => {
+    const end = snapToNode(graph, LAT0 + 9 * SPACING_DEG_LAT, LON0 + 9 * SPACING_DEG_LON);
+    const p2p = tourBeamSearch(graph, start, snapped, { ...options, endNode: end });
+    expect(p2p.length).toBeGreaterThan(0);
+    for (const c of p2p) {
+      expect(c.lengthM).toBeGreaterThanOrEqual(3600 * 0.95);
+      expect(c.lengthM).toBeLessThanOrEqual(3600 * 1.05);
+      const pts = tourCoursePoints(graph, c, start);
+      expect(pts[0]).toEqual([LAT0 + 6 * SPACING_DEG_LAT, LON0 + 6 * SPACING_DEG_LON]);
+      expect(pts[pts.length - 1]).toEqual([LAT0 + 9 * SPACING_DEG_LAT, LON0 + 9 * SPACING_DEG_LON]);
+    }
+    // Improvement keeps both endpoints where they are.
+    const improved = improveTourCourse(graph, p2p[0]!, start, snapped, {
+      ...options,
+      endNode: end,
+    });
+    const pts = tourCoursePoints(graph, improved, start);
+    expect(pts[pts.length - 1]).toEqual([LAT0 + 9 * SPACING_DEG_LAT, LON0 + 9 * SPACING_DEG_LON]);
+    expect(improved.score).toBeGreaterThanOrEqual(p2p[0]!.score);
+  });
+
   it('improvement never lowers the score and keeps the length legal', () => {
     const best = courses[0]!;
     const improved = improveTourCourse(graph, best, start, snapped, options);
     expect(improved.score).toBeGreaterThanOrEqual(best.score);
     expect(improved.lengthM).toBeGreaterThanOrEqual(3600 * 0.95);
     expect(improved.lengthM).toBeLessThanOrEqual(3600 * 1.05);
+  });
+
+  it('re-improving after a place is dropped keeps the course legal', () => {
+    const best = courses[0]!;
+    const droppedId = best.collected[0]!.id;
+    const remaining = snapped.filter((p) => p.id !== droppedId);
+    const improved = improveTourCourse(graph, best, start, remaining, options);
+    expect(improved.lengthM).toBeGreaterThanOrEqual(3600 * 0.95);
+    expect(improved.lengthM).toBeLessThanOrEqual(3600 * 1.05);
+    expect(improved.collected.some((c) => c.id === droppedId)).toBe(false);
   });
 
   it('a repeated edge costs: an out-and-back scores below the loop', () => {

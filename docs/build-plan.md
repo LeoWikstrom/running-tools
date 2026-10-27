@@ -208,7 +208,7 @@ Seven phases; each ends in something usable. Claude Code finishes one phase, run
 
 * Done when: from a start point and 8 km the app proposes a loop touching at least 8 places with score ≥ 30 and avoiding roads without sidewalks.
 
-**Phase 7 – Later** (optional): LLM rewriting of the texts with the user's API key; official websites via the native bridge and a proxy; cloud TTS from the web; place photo in the notification; export of places as proximity-alert waypoints for a Garmin watch.
+**Phase 7 – Later** (optional): LLM rewriting of the texts with the user's API key, which also translates non-English sources reliably (the browser Translator API is already wired as a best-effort on-device fallback); official websites via the native bridge and a proxy; cloud TTS from the web; place photo in the notification; export of places as proximity-alert waypoints for a Garmin watch.
 
 ## Risks and decisions
 

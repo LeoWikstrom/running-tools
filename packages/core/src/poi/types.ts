@@ -11,6 +11,9 @@ export interface PlaceCandidate {
   wikidataId?: string;
   /** Best Wikipedia page for fetching the text later. */
   wikipedia?: { lang: string; title: string };
+  /** Every language's page seen while merging — the narration language picks
+      its own title from here rather than guessing one. */
+  wikipedias?: { lang: string; title: string }[];
   /** Wikipedia page length in bytes, a proxy for how much there is to tell. */
   pageLength?: number;
   sitelinks?: number;
@@ -34,6 +37,8 @@ export interface Place extends PlaceCandidate {
   triggerD: number;
   /** Lateral distance from the course, metres. */
   offset: number;
+  /** Which hand the place is on when clearly off the path; absent when on it. */
+  side?: 'left' | 'right';
 }
 
 export interface PoiSettings {
@@ -48,7 +53,9 @@ export interface PoiSettings {
 }
 
 export const DEFAULT_POI_SETTINGS: PoiSettings = {
-  corridorWidth: 80,
+  // 80 let in places a block away, behind corners and invisible from the
+  // course; 60 keeps roughly "across the street and the square".
+  corridorWidth: 60,
   minSpacing: 200,
   leadDistance: 30,
   maxPlaces: 25,

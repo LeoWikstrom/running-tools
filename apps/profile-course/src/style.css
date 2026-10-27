@@ -1090,3 +1090,25 @@ dl.shortcuts kbd {
     display: block;
   }
 }
+
+.toast {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  max-width: 90vw;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: CanvasText;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.toast.show {
+  opacity: 1;
+}

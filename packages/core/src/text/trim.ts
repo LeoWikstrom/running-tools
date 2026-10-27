@@ -55,12 +55,91 @@ export interface ComposedText {
   seconds: number;
 }
 
+export type NarrationLang = 'en' | 'sv' | 'it';
+
+export const NARRATION_LANGS: { code: NarrationLang; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'sv', label: 'Svenska' },
+  { code: 'it', label: 'Italiano' },
+];
+
+/** Opening lines per language; {name} is replaced. Varied to avoid repetition. */
+const OPENERS: Record<NarrationLang, { passing: string[]; left: string[]; right: string[] }> = {
+  en: {
+    passing: ['You are passing {name}.', 'You are coming up on {name}.', 'Just ahead is {name}.'],
+    left: [
+      'On your left you can see {name}.',
+      'To your left is {name}.',
+      'Coming up on your left: {name}.',
+    ],
+    right: [
+      'On your right you can see {name}.',
+      'To your right is {name}.',
+      'Coming up on your right: {name}.',
+    ],
+  },
+  sv: {
+    passing: [
+      'Du passerar {name}.',
+      'Snart kommer du till {name}.',
+      'Strax framför dig ligger {name}.',
+    ],
+    left: [
+      'Till vänster ser du {name}.',
+      'På din vänstra sida ligger {name}.',
+      'Snart dyker {name} upp till vänster.',
+    ],
+    right: [
+      'Till höger ser du {name}.',
+      'På din högra sida ligger {name}.',
+      'Snart dyker {name} upp till höger.',
+    ],
+  },
+  it: {
+    passing: [
+      'Stai passando {name}.',
+      'Stai per arrivare a {name}.',
+      'Poco più avanti trovi {name}.',
+    ],
+    left: [
+      'Alla tua sinistra puoi vedere {name}.',
+      'Sulla tua sinistra si trova {name}.',
+      'Tra poco, alla tua sinistra: {name}.',
+    ],
+    right: [
+      'Alla tua destra puoi vedere {name}.',
+      'Sulla tua destra si trova {name}.',
+      'Tra poco, alla tua destra: {name}.',
+    ],
+  },
+};
+
+/** Deterministic per name, so a refetch keeps the same opener. */
+export function pickOpener(
+  name: string,
+  side: 'left' | 'right' | undefined,
+  lang: string,
+): string {
+  const set = OPENERS[lang as NarrationLang] ?? OPENERS.en;
+  const list = side ? set[side] : set.passing;
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return list[hash % list.length]!.replace('{name}', name);
+}
+
 /**
- * The clip a place gets: "You are passing <name>." plus the cleaned extract
- * cut to the target duration.
+ * The clip a place gets: an opening line ("You are passing <name>." or, when
+ * the place sits clearly off the path, a left/right variant, in the narration
+ * language) plus the cleaned extract cut to the target duration.
  */
-export function composeText(name: string, extract: string, targetSeconds: number): ComposedText {
-  const prefix = `You are passing ${name}.`;
+export function composeText(
+  name: string,
+  extract: string,
+  targetSeconds: number,
+  side?: 'left' | 'right',
+  lang = 'en',
+): ComposedText {
+  const prefix = pickOpener(name, side, lang);
   const budget = Math.max(10, Math.round(targetSeconds * WORDS_PER_SECOND) - countWords(prefix));
   const cleaned = stripNoiseParentheticals(extract);
   const body = cutToTarget(cleaned, budget);

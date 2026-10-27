@@ -15,6 +15,7 @@ import { renderInteractiveChart, type ChartHandle } from './ui/profileChart';
 import { captureTops, playReorder, slideIn, slideOutRow } from './ui/animate';
 import { hideResult, renderCourseTabs, renderResult, type ResultElements } from './ui/resultPanel';
 import { initSheet } from './ui/sheet';
+import { toast } from './ui/toast';
 import { closeDialog, dialogOpen, openDialog } from './ui/dialog';
 import { initDrawProfile } from './ui/drawProfile';
 import { decodeLink, encodeLink, linkStateToParams } from './ui/linkCodec';
@@ -1448,6 +1449,7 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
       if (msg.ready > 1) {
         startHint.textContent = `${msg.ready} courses found — switch with the tabs at the top, or press 1–${msg.ready}.`;
       }
+      toast(msg.ready > 1 ? `${msg.ready} courses found.` : 'Course found.');
       searchDone();
       break;
     }
@@ -1468,6 +1470,7 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
             ? `Matched ${Math.round(msg.snappedFraction * 100)} % of the course to the path network.`
             : `Course updated — mismatch ${msg.course.score.toFixed(1)}.`;
         startHint.textContent = summary;
+        toast(summary);
         persistSession();
         // Stay in editing mode: re-arm on the updated course.
         if (editingMode) {
@@ -1483,6 +1486,7 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
       if (msg.gen !== searchGeneration) break;
       clearResult();
       startHint.textContent = msg.message;
+      toast(msg.message);
       searchDone();
       break;
     case 'error':
@@ -1506,7 +1510,10 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
       // After the re-arm, which would otherwise talk over the reason with its
       // own invitation — leaving a refused edit looking like nothing happened.
       if (editingMode) setEditStatus(msg.message);
-      else startHint.textContent = msg.message;
+      else {
+        startHint.textContent = msg.message;
+        toast(msg.message);
+      }
       downloadAreaButton.textContent = 'Download area around start';
       downloadAreaButton.disabled = map.getStart() === null;
       areaProgress.hidden = true;

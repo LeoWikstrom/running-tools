@@ -1,3 +1,5 @@
+import { findCoveringArea, loadAreaPlaces } from '@running/core/net/areaStore';
+import { haversineMeters } from '@running/core/geo';
 import { fetchOsmPlaces, elementsToCandidates } from '@running/core/poi/osm';
 import {
   geosearch,
@@ -17,6 +19,23 @@ export interface FetchReport {
   failures: string[];
 }
 
+/** The smallest circle around the course, for matching against stored areas. */
+function boundingCircle(lats: number[], lons: number[]): { lat: number; lon: number; r: number } {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLon = Infinity;
+  let maxLon = -Infinity;
+  for (let i = 0; i < lats.length; i++) {
+    if (lats[i]! < minLat) minLat = lats[i]!;
+    if (lats[i]! > maxLat) maxLat = lats[i]!;
+    if (lons[i]! < minLon) minLon = lons[i]!;
+    if (lons[i]! > maxLon) maxLon = lons[i]!;
+  }
+  const lat = (minLat + maxLat) / 2;
+  const lon = (minLon + maxLon) / 2;
+  return { lat, lon, r: haversineMeters(lat, lon, maxLat, maxLon) };
+}
+
 /** Fetch place candidates from all three sources along the course. */
 export async function fetchCandidates(
   lats: number[],
@@ -24,6 +43,17 @@ export async function fetchCandidates(
   localLang: string,
   onProgress: (text: string) => void,
 ): Promise<FetchReport> {
+  // A downloaded area that covers the whole course serves its stored places.
+  const circle = boundingCircle(lats, lons);
+  const area = await findCoveringArea(circle, circle.r + OSM_CORRIDOR_M);
+  if (area) {
+    const stored = await loadAreaPlaces(area.id);
+    if (stored && stored.length > 0) {
+      onProgress('Places from the downloaded area.');
+      return { candidates: stored, failures: [] };
+    }
+  }
+
   const centers = sampleCenters(lats, lons, CENTER_RADIUS_M);
   const langs = localLang && localLang !== 'en' ? ['en', localLang] : ['en'];
   const jobs: { name: string; run: () => Promise<PlaceCandidate[]> }[] = [];
@@ -40,7 +70,9 @@ export async function fetchCandidates(
     jobs.push({
       name: 'Wikidata',
       run: async () =>
-        itemsToCandidates(await fetchItemsAround(c.lat, c.lon, CENTER_RADIUS_M / 1000)),
+        itemsToCandidates(
+          await fetchItemsAround(c.lat, c.lon, CENTER_RADIUS_M / 1000, { wikiLangs: langs }),
+        ),
     });
   }
   jobs.push({

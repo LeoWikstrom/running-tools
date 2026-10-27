@@ -52,6 +52,14 @@ describe('firstPassProjection', () => {
     expect(firstPassProjection(lineLats, lineLons, 57.703, 11.975, 80)).toBeNull();
   });
 
+  it('says which hand the point is on', () => {
+    // Heading east: north of the line is on the runner's left.
+    const north = firstPassProjection(lineLats, lineLons, 57.7005, 11.975, 80)!;
+    expect(north.side).toBe(1);
+    const south = firstPassProjection(lineLats, lineLons, 57.6995, 11.975, 80)!;
+    expect(south.side).toBe(-1);
+  });
+
   it('keeps the first pass of an out-and-back', () => {
     // Out along the line and straight back.
     const la = [57.7, 57.7, 57.7];

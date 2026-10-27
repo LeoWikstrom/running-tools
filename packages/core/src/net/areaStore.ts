@@ -1,5 +1,6 @@
 import { haversineMeters } from '../geo';
 import type { LatLon } from '../geo';
+import type { PlaceCandidate } from '../poi/types';
 import { cacheGet, cacheSet, cacheSetOrThrow } from './cache';
 import type { OverpassResponse } from './overpass';
 
@@ -51,7 +52,17 @@ export async function deleteArea(id: string): Promise<StoredArea[]> {
   const areas = (await listAreas()).filter((a) => a.id !== id);
   await cacheSet(INDEX_KEY, areas);
   await cacheSet(`area:${id}`, undefined);
+  await cacheSet(`areaplaces:${id}`, undefined);
   return areas;
+}
+
+/** Place candidates fetched for the area's circle, stored beside the network. */
+export async function saveAreaPlaces(id: string, candidates: PlaceCandidate[]): Promise<void> {
+  await cacheSetOrThrow(`areaplaces:${id}`, candidates);
+}
+
+export async function loadAreaPlaces(id: string): Promise<PlaceCandidate[] | undefined> {
+  return cacheGet<PlaceCandidate[]>(`areaplaces:${id}`);
 }
 
 /** Smallest stored area whose circle fully covers the requested one. */

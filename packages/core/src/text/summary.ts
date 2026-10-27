@@ -17,6 +17,10 @@ const LEAD_TOO_SHORT_WORDS = 40;
 
 const SECTION_HEADINGS = /^(history|architecture|background|description|historia|arkitektur|beskrivning)$/i;
 
+/** Apparatus sections that make no narration (en/sv/it). */
+const NOISE_HEADINGS =
+  /^(references|external links|see also|sources|notes|bibliography|gallery|further reading|referenser|externa länkar|se även|källor|noter|litteratur|galleri|vidare läsning|note|bibliografia|voci correlate|altri progetti|collegamenti esterni|galleria d'immagini)$/i;
+
 async function restSummary(
   lang: string,
   title: string,
@@ -65,11 +69,11 @@ export function splitExtractSections(plain: string): { heading: string; body: st
   return out.filter((s) => s.body.length > 0);
 }
 
-async function fullPageSection(
+async function fullPageSections(
   lang: string,
   title: string,
   options: TextFetchOptions,
-): Promise<string | null> {
+): Promise<{ heading: string; body: string }[]> {
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   const key = `wikiextract:v1:${lang}:${title}`;
   let plain = await cacheGet<string>(key);
@@ -91,28 +95,41 @@ async function fullPageSection(
     plain = Object.values(json.query?.pages ?? {})[0]?.extract ?? '';
     await cacheSet(key, plain);
   }
-  if (!plain) return null;
-  const sections = splitExtractSections(plain);
-  const preferred = sections.find((s) => SECTION_HEADINGS.test(s.heading));
-  return preferred?.body ?? null;
+  if (!plain) return [];
+  return splitExtractSections(plain);
 }
 
 /**
- * The text material for a place: the REST summary lead, topped up with the
- * History/Architecture section when the lead is under 40 words. Tries the
- * given pages in order (English first by convention).
+ * The text material for a place: the REST summary lead, topped up from the
+ * full page until `targetWords` is covered — History/Architecture-style
+ * sections first, then the rest in page order, apparatus skipped. Tries the
+ * given pages in order (narration language first by convention).
  */
 export async function fetchExtract(
   pages: { lang: string; title: string }[],
-  options: TextFetchOptions = {},
+  options: TextFetchOptions & { targetWords?: number } = {},
 ): Promise<PlaceExtract | null> {
+  const target = Math.max(options.targetWords ?? 0, LEAD_TOO_SHORT_WORDS);
   for (const page of pages) {
     const lead = await restSummary(page.lang, page.title, options);
     if (!lead) continue;
-    if (countWords(lead.extract) >= LEAD_TOO_SHORT_WORDS) return lead;
-    const section = await fullPageSection(page.lang, page.title, options).catch(() => null);
-    if (section) return { ...lead, extract: `${lead.extract} ${section}` };
-    return lead;
+    let text = lead.extract;
+    if (countWords(text) >= target) return lead;
+    const sections = await fullPageSections(page.lang, page.title, options).catch(
+      () => [] as { heading: string; body: string }[],
+    );
+    const usable = sections.filter(
+      (s) => s.heading.length > 0 && !NOISE_HEADINGS.test(s.heading),
+    );
+    const ordered = [
+      ...usable.filter((s) => SECTION_HEADINGS.test(s.heading)),
+      ...usable.filter((s) => !SECTION_HEADINGS.test(s.heading)),
+    ];
+    for (const s of ordered) {
+      if (countWords(text) >= target) break;
+      text = `${text} ${s.body}`;
+    }
+    return { ...lead, extract: text };
   }
   return null;
 }

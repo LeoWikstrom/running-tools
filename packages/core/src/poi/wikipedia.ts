@@ -22,6 +22,7 @@ interface QueryPage {
 
 export interface WikiQueryResponse {
   query?: { pages?: Record<string, QueryPage> };
+  continue?: Record<string, string>;
 }
 
 /** Pages with coordinates out of a raw API query response. */
@@ -46,19 +47,39 @@ async function runQuery(
     if (cached) return cached;
   }
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
-  const search = new URLSearchParams({
-    action: 'query',
-    format: 'json',
-    origin: '*',
-    prop: 'info|coordinates|pageprops',
-    ppprop: 'wikibase_item',
-    colimit: 'max',
-    ...params,
-  });
-  const res = await fetchFn(`https://${lang}.wikipedia.org/w/api.php?${search.toString()}`);
-  if (!res.ok) throw new Error(`Wikipedia ${lang} returned ${res.status}`);
-  const json = (await res.json()) as WikiQueryResponse;
-  const pages = Object.values(json.query?.pages ?? {});
+  // With a generator plus several props the API answers in instalments: a page
+  // can arrive without its coordinates and get them in a later round, and a
+  // dense area (central Gothenburg on sv.wikipedia) overflows one answer
+  // entirely. Follow `continue` and merge per pageid, or places silently vanish.
+  const byId = new Map<number, QueryPage>();
+  let cont: Record<string, string> = {};
+  for (let round = 0; round < 12; round++) {
+    const search = new URLSearchParams({
+      action: 'query',
+      format: 'json',
+      origin: '*',
+      prop: 'info|coordinates|pageprops',
+      ppprop: 'wikibase_item',
+      colimit: 'max',
+      ...params,
+      ...cont,
+    });
+    const res = await fetchFn(`https://${lang}.wikipedia.org/w/api.php?${search.toString()}`);
+    if (!res.ok) throw new Error(`Wikipedia ${lang} returned ${res.status}`);
+    const json = (await res.json()) as WikiQueryResponse;
+    for (const p of Object.values(json.query?.pages ?? {})) {
+      const seen = byId.get(p.pageid);
+      if (!seen) byId.set(p.pageid, { ...p });
+      else {
+        seen.coordinates ??= p.coordinates;
+        seen.pageprops ??= p.pageprops;
+        seen.length ??= p.length;
+      }
+    }
+    if (!json.continue) break;
+    cont = json.continue;
+  }
+  const pages = [...byId.values()];
   if (key) await cacheSet(key, pages);
   return pages;
 }
@@ -89,7 +110,8 @@ export async function geosearch(
   options: WikiFetchOptions = {},
 ): Promise<WikiGeoPage[]> {
   const radius = Math.min(Math.round(radiusMeters), GEOSEARCH_MAX_RADIUS);
-  const key = `wikigeo:v1:${lang}:${lat.toFixed(3)},${lon.toFixed(3)},${Math.round(radius / 100)}`;
+  // v2: v1 entries predate continuation and are truncated.
+  const key = `wikigeo:v2:${lang}:${lat.toFixed(3)},${lon.toFixed(3)},${Math.round(radius / 100)}`;
   const pages = await runQuery(
     lang,
     {

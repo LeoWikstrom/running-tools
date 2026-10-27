@@ -36,6 +36,11 @@ body {
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -2px 12px rgb(0 0 0 / 0.25);
   padding: 4px 16px 16px;
+  /* The box always reaches nearly the whole screen so all four drag stops
+     exist even while the panel holds little; a stop pushes the surplus below
+     the screen edge, exactly like profile-course. */
+  min-height: calc(100vh - 64px);
+  min-height: calc(100dvh - 64px);
   max-height: calc(100vh - 64px);
   max-height: calc(100dvh - 64px);
   overflow-y: auto;
@@ -95,6 +100,7 @@ h1 {
     top: 0;
     right: auto;
     width: 410px;
+    min-height: 0;
     max-height: none;
     border-radius: 0;
     box-shadow: 3px 0 14px rgb(0 0 0 / 0.35);
@@ -114,6 +120,17 @@ h1 {
   gap: 8px;
 }
 
+/* A chosen file's name makes the input as wide as the name; clip it to the row. */
+#gpx-row .control {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#gpx-row input[type='file'] {
+  width: 100%;
+}
+
 .lang-control {
   flex: 0 0 auto;
 }
@@ -126,6 +143,41 @@ button {
   background: var(--panel-bg);
   color: CanvasText;
   cursor: pointer;
+}
+
+.gen-pin {
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+  cursor: grab;
+}
+
+.gen-pin.start {
+  background: var(--accent);
+}
+
+.gen-pin.finish {
+  background: #b3403a;
+}
+
+#area-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+#area-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+#area-list button {
+  min-height: 28px;
+  padding: 0 8px;
 }
 
 #find-places {
@@ -310,4 +362,33 @@ button {
   background: var(--accent);
   color: white;
   border: none;
+}
+
+.map-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 140px;
+}
+
+.toast {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  max-width: 90vw;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--panel-bg);
+  color: CanvasText;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.toast.show {
+  opacity: 1;
 }

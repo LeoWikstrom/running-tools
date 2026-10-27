@@ -11,6 +11,9 @@ export interface WikidataItem {
   types: string[];
   website?: string;
   image?: string;
+  /** Wikipedia article titles by language, from the item's sitelinks — the
+      only road to a local-language page that carries no coordinates itself. */
+  articles?: { lang: string; title: string }[];
 }
 
 interface SparqlBinding {
@@ -20,16 +23,34 @@ interface SparqlBinding {
 export interface WikidataFetchOptions {
   fetchFn?: typeof fetch;
   languages?: string;
+  /** Wikipedias whose article titles to fetch via sitelinks. */
+  wikiLangs?: string[];
 }
 
 const ENDPOINT = 'https://query.wikidata.org/sparql';
 
-function buildQuery(lat: number, lon: number, radiusKm: number, languages: string): string {
+function buildQuery(
+  lat: number,
+  lon: number,
+  radiusKm: number,
+  languages: string,
+  wikiLangs: string[],
+): string {
+  const articleSelect = wikiLangs
+    .map((_, i) => `(SAMPLE(?articleV${i}) AS ?article${i})`)
+    .join('\n       ');
+  const articleWhere = wikiLangs
+    .map(
+      (l, i) =>
+        `OPTIONAL { ?articleV${i} schema:about ?item ; schema:isPartOf <https://${l}.wikipedia.org/> . }`,
+    )
+    .join('\n  ');
   return `
 SELECT ?item ?itemLabel ?lat ?lon ?sitelinks
        (SAMPLE(?heritageV) AS ?heritage)
        (SAMPLE(?websiteV) AS ?website)
        (SAMPLE(?imageV) AS ?image)
+       ${articleSelect}
        (GROUP_CONCAT(DISTINCT STRAFTER(STR(?typeV), "entity/"); separator=",") AS ?types)
 WHERE {
   SERVICE wikibase:around {
@@ -43,6 +64,7 @@ WHERE {
   OPTIONAL { ?item wdt:P1435 ?heritageV . }
   OPTIONAL { ?item wdt:P856 ?websiteV . }
   OPTIONAL { ?item wdt:P18 ?imageV . }
+  ${articleWhere}
   BIND(geof:latitude(?coord) AS ?lat)
   BIND(geof:longitude(?coord) AS ?lon)
   SERVICE wikibase:label { bd:serviceParam wikibase:language "${languages}". }
@@ -51,9 +73,22 @@ GROUP BY ?item ?itemLabel ?lat ?lon ?sitelinks
 LIMIT 2000`;
 }
 
-export function parseSparqlResults(json: {
-  results?: { bindings?: SparqlBinding[] };
-}): WikidataItem[] {
+function articleTitle(url: string): string | null {
+  const path = url.split('/wiki/')[1];
+  if (!path) return null;
+  try {
+    return decodeURIComponent(path).replace(/_/g, ' ');
+  } catch {
+    return null;
+  }
+}
+
+export function parseSparqlResults(
+  json: {
+    results?: { bindings?: SparqlBinding[] };
+  },
+  wikiLangs: string[] = [],
+): WikidataItem[] {
   const out: WikidataItem[] = [];
   for (const b of json.results?.bindings ?? []) {
     const id = b.item?.value.split('/entity/')[1];
@@ -61,7 +96,14 @@ export function parseSparqlResults(json: {
     const lon = Number(b.lon?.value);
     if (!id || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
     const label = b.itemLabel?.value ?? '';
+    const articles: { lang: string; title: string }[] = [];
+    wikiLangs.forEach((lang, i) => {
+      const url = b[`article${i}`]?.value;
+      const title = url ? articleTitle(url) : null;
+      if (title) articles.push({ lang, title });
+    });
     out.push({
+      articles: articles.length > 0 ? articles : undefined,
       id,
       // An unlabelled item echoes its own id as the label; treat that as no name.
       label: label === id ? '' : label,
@@ -84,17 +126,19 @@ export async function fetchItemsAround(
   radiusKm: number,
   options: WikidataFetchOptions = {},
 ): Promise<WikidataItem[]> {
-  const key = `wikidata:v1:${lat.toFixed(3)},${lon.toFixed(3)},${radiusKm.toFixed(1)}`;
+  const wikiLangs = options.wikiLangs ?? ['en'];
+  const key = `wikidata:v2:${lat.toFixed(3)},${lon.toFixed(3)},${radiusKm.toFixed(1)},${wikiLangs.join('+')}`;
   const cached = await cacheGet<WikidataItem[]>(key);
   if (cached) return cached;
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
-  const query = buildQuery(lat, lon, radiusKm, options.languages ?? 'en,sv,mul');
+  const query = buildQuery(lat, lon, radiusKm, options.languages ?? 'en,sv,mul', wikiLangs);
   const res = await fetchFn(`${ENDPOINT}?query=${encodeURIComponent(query)}&format=json`, {
     headers: { Accept: 'application/sparql-results+json' },
   });
   if (!res.ok) throw new Error(`Wikidata query service returned ${res.status}`);
   const items = parseSparqlResults(
     (await res.json()) as { results?: { bindings?: SparqlBinding[] } },
+    wikiLangs,
   );
   await cacheSet(key, items);
   return items;
@@ -108,6 +152,8 @@ export function itemsToCandidates(items: WikidataItem[]): PlaceCandidate[] {
       lat: i.lat,
       lon: i.lon,
       wikidataId: i.id,
+      wikipedia: i.articles?.find((a) => a.lang === 'en') ?? i.articles?.[0],
+      wikipedias: i.articles,
       sitelinks: i.sitelinks,
       heritage: i.heritage || undefined,
       types: i.types,

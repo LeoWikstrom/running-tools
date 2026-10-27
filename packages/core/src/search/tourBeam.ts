@@ -1,4 +1,5 @@
-import { haversineMeters } from '../geo';
+import { angleDiffDeg, bearingDeg, haversineMeters } from '../geo';
+import { cellAndNeighbours, cellIdAt } from '../graph/cells';
 import { dijkstra } from '../graph/dijkstra';
 import { kShortestPaths, pathNodes } from '../graph/ksp';
 import { otherNode, type Graph } from '../graph/types';
@@ -23,7 +24,9 @@ export interface TourSearchPlace {
 export interface TourWeights {
   /** Multiplier on collected interest. */
   interest: number;
-  /** Cost per metre of edge walked more than once. */
+  /** Cost per metre of ground walked more than once. In the final scorer the
+      same ~14 m corridor grid as profile-course decides "same ground", so
+      going back down the other sidewalk of the same street also pays. */
   repeat: number;
   /** Multiplier on the edge safety penalty (per metre). */
   penalty: number;
@@ -33,6 +36,11 @@ export interface TourWeights {
   crowding: number;
   /** Cost per metre per km the edge lies from the centroid of the places. */
   centroid: number;
+  /** Cost per junction direction change: this × (1 − cos θ), so a U-turn pays double a right angle. */
+  turn: number;
+  /** Flat cost each time the course re-visits a node (the start exempt) — a
+      detour looping round a block comes back to the node it left from. */
+  crossing: number;
 }
 
 export const DEFAULT_TOUR_WEIGHTS: TourWeights = {
@@ -42,6 +50,8 @@ export const DEFAULT_TOUR_WEIGHTS: TourWeights = {
   lengthDiff: 0.05,
   crowding: 0.5,
   centroid: 0,
+  turn: 0,
+  crossing: 0,
 };
 
 export interface TourSearchOptions {
@@ -53,6 +63,10 @@ export interface TourSearchOptions {
   beamWidth?: number;
   /** ± fraction of the target length a finished loop may differ. */
   lengthToleranceFrac?: number;
+  /** Wall-clock cap on improveTourCourse; dense city graphs need one. */
+  improveTimeMs?: number;
+  /** Finish node for a point-to-point course; the start itself when absent (a loop). */
+  endNode?: number;
   onProgress?: (fraction: number) => void;
 }
 
@@ -126,9 +140,30 @@ function hasBit(s: { bitsLo: number; bitsHi: number }, i: number): boolean {
   return i < 32 ? (s.bitsLo & (1 << i)) !== 0 : (s.bitsHi & (1 << (i - 32))) !== 0;
 }
 
+/** Cost factor (0..2) for turning from edge `a` into edge `b` at `node`. */
+function turnFactor(graph: Graph, a: number, b: number, node: number): number {
+  const out = (edgeIdx: number): number => {
+    const e = graph.edges[edgeIdx]!;
+    const n = e.lats.length;
+    return e.a === node
+      ? bearingDeg(e.lats[0]!, e.lons[0]!, e.lats[1]!, e.lons[1]!)
+      : bearingDeg(e.lats[n - 1]!, e.lons[n - 1]!, e.lats[n - 2]!, e.lons[n - 2]!);
+  };
+  // Arriving along `a` means walking against `out(a)`; straight on is 180° from it.
+  const dev = 180 - Math.abs(angleDiffDeg(out(a), out(b)));
+  return 1 - Math.cos((dev * Math.PI) / 180);
+}
+
 function edgeUsed(state: State, edge: number): boolean {
   for (let s: State | null = state; s; s = s.parent) {
     if (s.viaEdge === edge) return true;
+  }
+  return false;
+}
+
+function nodeUsed(state: State, node: number): boolean {
+  for (let s: State | null = state; s; s = s.parent) {
+    if (s.node === node) return true;
   }
   return false;
 }
@@ -147,6 +182,7 @@ export function tourBeamSearch(
   const bucketM = options.bucketM ?? 100;
   const beamWidth = options.beamWidth ?? 200;
   const minSpacing = options.minSpacingM ?? 200;
+  const endNode = options.endNode ?? startNode;
 
   // Places per node (several statues can share a square's corner node).
   const placesAtNode = new Map<number, number[]>();
@@ -171,8 +207,8 @@ export function tourBeamSearch(
     return w.centroid * km * e.lengthM;
   };
 
-  // Reachability: a state that cannot get home within maxLen is dead.
-  const home = dijkstra(graph, [startNode]).dist;
+  // Reachability: a state that cannot reach the finish within maxLen is dead.
+  const home = dijkstra(graph, [endNode]).dist;
 
   const nBuckets = Math.ceil(maxLen / bucketM) + 1;
   const buckets: State[][] = Array.from({ length: nBuckets }, () => []);
@@ -234,8 +270,13 @@ export function tourBeamSearch(
         const v = otherNode(e, s.node);
         const dist = s.dist + e.lengthM;
         if (dist + home[v]! > maxLen) continue;
+        const finishes = v === endNode && dist >= minLen && dist <= maxLen;
         let score = s.score - w.penalty * Math.max(0, e.penalty) * e.lengthM - centroidCost(ei);
         if (edgeUsed(s, ei)) score -= w.repeat * e.lengthM;
+        if (w.turn > 0 && s.viaEdge >= 0) {
+          score -= w.turn * turnFactor(graph, s.viaEdge, ei, s.node);
+        }
+        if (w.crossing > 0 && !finishes && nodeUsed(s, v)) score -= w.crossing;
         const next: State = {
           node: v,
           dist,
@@ -248,7 +289,7 @@ export function tourBeamSearch(
           viaEdge: ei,
         };
         collectAt(next, v);
-        if (v === startNode && dist >= minLen && dist <= maxLen) {
+        if (finishes) {
           finished.push(next);
           continue;
         }
@@ -289,6 +330,25 @@ export function tourBeamSearch(
     dirs.reverse();
     const scored = scoreTourCourse(graph, edges, startNode, places, w, target, minSpacing);
     return { edges, dirs, lengthM: s.dist, score: scored.score, collected: scored.collected };
+  }
+}
+
+/** ~12 m samples along an edge's geometry, for the corridor-cell grid. */
+function eachCellSample(
+  e: Graph['edges'][number],
+  fn: (lat: number, lon: number) => void,
+): void {
+  const n = e.lats.length;
+  fn(e.lats[0]!, e.lons[0]!);
+  for (let i = 1; i < n; i++) {
+    const la0 = e.lats[i - 1]!;
+    const lo0 = e.lons[i - 1]!;
+    const la1 = e.lats[i]!;
+    const lo1 = e.lons[i]!;
+    const steps = Math.max(1, Math.ceil(haversineMeters(la0, lo0, la1, lo1) / 12));
+    for (let s = 1; s <= steps; s++) {
+      fn(la0 + ((la1 - la0) * s) / steps, lo0 + ((lo1 - lo0) * s) / steps);
+    }
   }
 }
 
@@ -343,18 +403,51 @@ export function scoreTourCourse(
   };
 
   collect(startNode);
-  for (const ei of edges) {
+  let prevEdge = -1;
+  const visited = new Set<number>([startNode]);
+  const visitedCells = weights.repeat > 0 ? new Set<number>() : null;
+  const neigh: number[] = [];
+  for (let i = 0; i < edges.length; i++) {
+    const ei = edges[i]!;
     const e = graph.edges[ei]!;
     length += e.lengthM;
     score -= weights.penalty * Math.max(0, e.penalty) * e.lengthM;
+    if (weights.turn > 0 && prevEdge >= 0) {
+      score -= weights.turn * turnFactor(graph, prevEdge, ei, node);
+    }
+    prevEdge = ei;
     if (weights.centroid > 0 && places.length > 0) {
       const mid = e.lats.length >> 1;
       const km = haversineMeters(e.lats[mid]!, e.lons[mid]!, centroidLat, centroidLon) / 1000;
       score -= weights.centroid * km * e.lengthM;
     }
-    if (seenEdges.has(ei)) score -= weights.repeat * e.lengthM;
+    if (seenEdges.has(ei)) {
+      score -= weights.repeat * e.lengthM;
+    } else if (visitedCells) {
+      // Ground covered before on *another* edge — the other sidewalk of the
+      // same street, a twin path — is a repeat too, by the ~14 m cell grid.
+      let overlap = 0;
+      let total = 0;
+      eachCellSample(e, (la, lo) => {
+        total++;
+        if (visitedCells.has(cellIdAt(la, lo))) overlap++;
+      });
+      // One touching sample is just a junction corner, not covered ground.
+      if (overlap > 1) score -= weights.repeat * (overlap / total) * e.lengthM;
+    }
+    if (visitedCells) {
+      eachCellSample(e, (la, lo) => {
+        cellAndNeighbours(cellIdAt(la, lo), neigh);
+        for (const c of neigh) visitedCells.add(c);
+      });
+    }
     seenEdges.add(ei);
     node = otherNode(e, node);
+    // The course crossing itself costs; the arrival that ends it does not.
+    if (weights.crossing > 0 && i < edges.length - 1 && visited.has(node)) {
+      score -= weights.crossing;
+    }
+    visited.add(node);
     collect(node);
   }
   score -= weights.lengthDiff * Math.abs(length - targetLengthM);
@@ -368,7 +461,9 @@ const IMPROVE_K = 4;
 /**
  * The profile matcher's window replacement with the tour score: slide
  * 300–1500 m windows over the loop, try k shortest alternatives, keep an
- * improvement that stays inside the length tolerance. Two passes.
+ * improvement that stays inside the length tolerance. Scans resume where
+ * the last improvement landed, and a wall-clock deadline bounds the whole
+ * thing — a dense city graph has thousands of windows per pass.
  */
 export function improveTourCourse(
   graph: Graph,
@@ -381,18 +476,26 @@ export function improveTourCourse(
   const target = options.targetLengthM;
   const tolerance = options.lengthToleranceFrac ?? 0.05;
   const minSpacing = options.minSpacingM ?? 200;
+  const timeMs = options.improveTimeMs ?? 10_000;
+  const deadline = Date.now() + timeMs;
 
   let edges = [...course.edges];
   let best = scoreTourCourse(graph, edges, startNode, places, w, target, minSpacing);
   let budget = 40; // the score rises strictly, so this is belt and braces
+  let startI = 0;
 
-  for (let pass = 0; pass < 2 && budget > 0; pass++) {
-    let improved = false;
+  outer: while (budget > 0) {
     const nodes = pathNodes(graph, { edges, dirs: [] }, startNode);
     const cum: number[] = [0];
     for (const ei of edges) cum.push(cum[cum.length - 1]! + graph.edges[ei]!.lengthM);
+    let improved = false;
 
-    for (let i = 0; i < nodes.length - 1; i++) {
+    for (let i = startI; i < nodes.length - 1; i++) {
+      if ((i & 15) === 0) {
+        const now = Date.now();
+        if (now > deadline) break outer;
+        options.onProgress?.(Math.min(1, 1 - (deadline - now) / timeMs));
+      }
       for (let j = i + 2; j < nodes.length; j++) {
         const windowLen = cum[j]! - cum[i]!;
         if (windowLen < IMPROVE_WINDOW_MIN_M) continue;
@@ -400,6 +503,7 @@ export function improveTourCourse(
         const from = nodes[i]!;
         const to = nodes[j]!;
         if (from === to) continue;
+        if (Date.now() > deadline) break outer;
         const alternatives = kShortestPaths(graph, from, to, IMPROVE_K, windowLen * 1.8);
         for (const alt of alternatives) {
           const candidate = [...edges.slice(0, i), ...alt.edges, ...edges.slice(j)];
@@ -417,12 +521,19 @@ export function improveTourCourse(
         }
         if (improved) break;
       }
-      if (improved) break;
+      if (improved) {
+        // The path changed from i on; rebuild and resume at the same spot.
+        budget--;
+        startI = i;
+        continue outer;
+      }
     }
-    if (!improved) break;
-    budget--;
-    pass--; // keep scanning from the top until a pass finds nothing
+    if (!improved) {
+      if (startI === 0) break;
+      startI = 0; // one last pass over the windows skipped before the resume point
+    }
   }
+  options.onProgress?.(1);
 
   // Rebuild dirs by walking the final edge list.
   const dirs: number[] = [];

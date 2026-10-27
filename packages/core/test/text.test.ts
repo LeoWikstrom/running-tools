@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   composeText,
+  pickOpener,
   countWords,
   cutToTarget,
   splitSentences,
@@ -59,7 +60,8 @@ describe('composeText', () => {
 
   it('prefixes the spoken line and lands near the target duration', () => {
     const c = composeText('Skansen Kronan', extract, 40);
-    expect(c.text.startsWith('You are passing Skansen Kronan.')).toBe(true);
+    expect(c.text.startsWith(pickOpener('Skansen Kronan', undefined, 'en'))).toBe(true);
+    expect(c.text).toContain('Skansen Kronan');
     expect(c.seconds).toBeGreaterThanOrEqual(30);
     expect(c.seconds).toBeLessThanOrEqual(50);
     expect(c.words).toBe(countWords(c.text));
@@ -73,7 +75,23 @@ describe('composeText', () => {
   });
 
   it('an empty extract still announces the place', () => {
-    expect(composeText('The Spot', '', 40).text).toBe('You are passing The Spot.');
+    expect(composeText('The Spot', '', 40).text).toBe(pickOpener('The Spot', undefined, 'en'));
+  });
+
+  it('a place off the path opens with the hand it is on', () => {
+    const c = composeText('Skansen Kronan', extract, 40, 'left');
+    expect(c.text.startsWith(pickOpener('Skansen Kronan', 'left', 'en'))).toBe(true);
+    expect(pickOpener('The Spot', 'right', 'en')).toContain('right');
+    expect(pickOpener('The Spot', 'right', 'en')).toContain('The Spot');
+  });
+
+  it('openers vary with the name, stay stable per name, and speak the language', () => {
+    const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    const openers = new Set(names.map((n) => pickOpener(n, undefined, 'en').replace(n, '')));
+    expect(openers.size).toBeGreaterThan(1);
+    expect(pickOpener('X', 'left', 'sv')).toContain('vänstra');
+    expect(pickOpener('X', 'right', 'it')).toContain('destra');
+    expect(pickOpener('X', undefined, 'nosuch')).toContain('X');
   });
 });
 

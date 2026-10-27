@@ -4,10 +4,14 @@ import { DEFAULT_POI_SETTINGS, type Place, type PlaceCandidate, type PoiSettings
 
 /** Along-course gap that separates two passes of the same spot. */
 const PASS_GAP_M = 150;
+/** Closer than this to the path, "on your left/right" would overclaim. */
+const SIDE_MIN_OFFSET_M = 15;
 
 export interface PassProjection {
   along: number;
   offset: number;
+  /** Which side of the travel direction the point lies: 1 left, −1 right, 0 on it. */
+  side: -1 | 0 | 1;
 }
 
 /**
@@ -54,6 +58,10 @@ export function firstPassProjection(
     const hereAlong = along + t * segLen;
 
     if (dist <= corridor) {
+      // The point sits at this frame's origin; z of travel × (course → point)
+      // says which hand it is on.
+      const z = dy * cx - dx * cy;
+      const side = z > 0 ? 1 : z < 0 ? -1 : 0;
       if (inPass && hereAlong - lastNearAlong > PASS_GAP_M && passBest) {
         // The previous pass ended a while ago; it was the first.
         firstPass = passBest;
@@ -61,9 +69,9 @@ export function firstPassProjection(
       }
       if (!inPass) {
         inPass = true;
-        passBest = { along: hereAlong, offset: dist };
+        passBest = { along: hereAlong, offset: dist, side };
       } else if (passBest && dist < passBest.offset) {
-        passBest = { along: hereAlong, offset: dist };
+        passBest = { along: hereAlong, offset: dist, side };
       }
       lastNearAlong = hereAlong;
     }
@@ -81,8 +89,17 @@ function normalizeName(name: string): string {
     .trim();
 }
 
+function addWikipedia(target: PlaceCandidate, page?: { lang: string; title: string }): void {
+  if (!page) return;
+  target.wikipedias ??= [];
+  if (!target.wikipedias.some((w) => w.lang === page.lang)) target.wikipedias.push(page);
+}
+
 function mergeInto(target: PlaceCandidate, extra: PlaceCandidate): void {
   target.wikidataId ??= extra.wikidataId;
+  addWikipedia(target, target.wikipedia);
+  addWikipedia(target, extra.wikipedia);
+  for (const w of extra.wikipedias ?? []) addWikipedia(target, w);
   // Prefer an English page for the default narration language.
   if (!target.wikipedia || (target.wikipedia.lang !== 'en' && extra.wikipedia?.lang === 'en')) {
     target.wikipedia = extra.wikipedia ?? target.wikipedia;
@@ -105,7 +122,12 @@ export function dedupeCandidates(candidates: PlaceCandidate[]): PlaceCandidate[]
   const out: PlaceCandidate[] = [];
 
   for (const raw of candidates) {
-    const c: PlaceCandidate = { ...raw, types: [...raw.types], sources: [...raw.sources] };
+    const c: PlaceCandidate = {
+      ...raw,
+      types: [...raw.types],
+      sources: [...raw.sources],
+      wikipedias: raw.wikipedias ? [...raw.wikipedias] : undefined,
+    };
     if (c.wikidataId) {
       const seen = byWikidata.get(c.wikidataId);
       if (seen) {
@@ -169,6 +191,12 @@ export function buildPlaces(
       d: pass.along,
       triggerD: Math.max(0, pass.along - s.leadDistance),
       offset: pass.offset,
+      side:
+        pass.offset >= SIDE_MIN_OFFSET_M && pass.side !== 0
+          ? pass.side === 1
+            ? 'left'
+            : 'right'
+          : undefined,
     });
   }
 
