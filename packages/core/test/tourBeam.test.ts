@@ -234,6 +234,28 @@ describe('tourBeamSearch on the synthetic grid', () => {
     }
   });
 
+  it('a required place is collected whatever it scores, and improvement keeps it', () => {
+    // A dull corner place far from the interesting ring: skipped when free.
+    const dull: TourSearchPlace = {
+      id: 'VIA',
+      name: 'Via',
+      lat: LAT0 + 11 * SPACING_DEG_LAT,
+      lon: LON0 + 11 * SPACING_DEG_LON,
+      score: 5,
+    };
+    const free = tourBeamSearch(graph, start, snapPlacesToNodes(graph, [...ringPlaces(), dull]), options);
+    expect(free[0]!.collected.some((c) => c.id === 'VIA')).toBe(false);
+
+    const snappedVia = snapPlacesToNodes(graph, [...ringPlaces(), { ...dull, required: true }]);
+    const must = tourBeamSearch(graph, start, snappedVia, options);
+    expect(must.length).toBeGreaterThan(0);
+    expect(must[0]!.collected.some((c) => c.id === 'VIA')).toBe(true);
+    const improved = improveTourCourse(graph, must[0]!, start, snappedVia, options);
+    expect(improved.collected.some((c) => c.id === 'VIA')).toBe(true);
+    expect(improved.lengthM).toBeGreaterThanOrEqual(3600 * 0.95);
+    expect(improved.lengthM).toBeLessThanOrEqual(3600 * 1.05);
+  });
+
   it('a finish node makes the course point-to-point', () => {
     const end = snapToNode(graph, LAT0 + 9 * SPACING_DEG_LAT, LON0 + 9 * SPACING_DEG_LON);
     const p2p = tourBeamSearch(graph, start, snapped, { ...options, endNode: end });

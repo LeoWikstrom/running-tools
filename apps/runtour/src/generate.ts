@@ -28,6 +28,8 @@ export interface GenerateParams {
   twistSlider: number;
   /** Only route over places with a Wikipedia page in this language. */
   requireLang: string | null;
+  /** Must-pass places: the course is required to collect each of these. */
+  vias: TourSearchPlace[];
 }
 
 export interface GeneratedCourse {
@@ -100,7 +102,7 @@ async function placesAround(
     stored && stored.length > 0
       ? stored.filter((c) => haversineMeters(center.lat, center.lon, c.lat, c.lon) <= radiusM)
       : await fetchAreaCandidates(center, radiusM, p.localLang);
-  return candidates
+  const out: TourSearchPlace[] = candidates
     .filter((c) => !isExcludedType(c))
     .filter(
       (c) =>
@@ -115,6 +117,33 @@ async function placesAround(
       score: interestScore(c),
     }))
     .filter((c) => c.score >= MIN_PLACE_SCORE);
+  // Vias join the pool as required — a via already in it is simply marked.
+  for (const via of p.vias) {
+    const near = out.find(
+      (c) => c.id === via.id || haversineMeters(c.lat, c.lon, via.lat, via.lon) < 60,
+    );
+    if (near) near.required = true;
+    else out.push({ ...via, required: true });
+  }
+  return out;
+}
+
+/**
+ * The circle generation works in — the plan's start/finish radius of
+ * length/2 × 0.6; point-to-point centres on the midpoint and also has to
+ * cover both endpoints. The network is fetched at radiusM + 300, places at
+ * radiusM + 500.
+ */
+export function generationCircle(
+  start: { lat: number; lon: number },
+  end: { lat: number; lon: number } | null,
+  targetLengthM: number,
+): { center: { lat: number; lon: number }; radiusM: number } {
+  const separation = end ? haversineMeters(start.lat, start.lon, end.lat, end.lon) : 0;
+  const center = end
+    ? { lat: (start.lat + end.lat) / 2, lon: (start.lon + end.lon) / 2 }
+    : start;
+  return { center, radiusM: (targetLengthM / 2) * 0.6 + separation / 2 };
 }
 
 export function generateCourse(
@@ -125,22 +154,17 @@ export function generateCourse(
   let cancelled = false;
 
   const promise = (async (): Promise<GeneratedCourse> => {
-    // The start/finish radius of the plan: length/2 × 0.6, places a bit wider.
-    // Point-to-point: everything centres on the midpoint and the radius also
-    // has to cover both endpoints.
     const separation = params.end
       ? haversineMeters(params.start.lat, params.start.lon, params.end.lat, params.end.lon)
       : 0;
     if (separation > params.targetLengthM * 1.05) {
       throw new Error('Start and finish are further apart than the course length.');
     }
-    const center = params.end
-      ? {
-          lat: (params.start.lat + params.end.lat) / 2,
-          lon: (params.start.lon + params.end.lon) / 2,
-        }
-      : params.start;
-    const radius = (params.targetLengthM / 2) * 0.6 + separation / 2;
+    const { center, radiusM: radius } = generationCircle(
+      params.start,
+      params.end,
+      params.targetLengthM,
+    );
     onProgress('Fetching places…', 0.05);
     const places = await placesAround(params, center, radius + 500);
     if (places.length === 0) {

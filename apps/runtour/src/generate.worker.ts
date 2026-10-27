@@ -57,6 +57,12 @@ onmessage = (e: MessageEvent<GenerateRequest>) => {
     if (snapped.length === 0) {
       throw new Error('No interesting places near enough a runnable way here.');
     }
+    const missingVia = places.find(
+      (p) => p.required && !snapped.some((s) => s.required && s.id === p.id),
+    );
+    if (missingVia) {
+      throw new Error(`No runnable way within 60 m of ${missingVia.name}.`);
+    }
     const options = {
       targetLengthM,
       weights,

@@ -32,84 +32,27 @@
           </label>
         </div>
         <label class="check"
-          ><input type="checkbox" id="native-only" /> Only places with sources in this language
+          ><input type="checkbox" id="native-only" checked /> Only places with sources in this language
           <button id="native-only-info" class="info" aria-label="About this option" hidden>ⓘ</button>
         </label>
         <p class="hint" id="course-stats" hidden></p>
         <p class="hint" id="hint">
-          Long-press the map (or Set start) to place a start, then Generate.
+          Long-press the map (or Set start) to place a start, then Generate. Drag the markers to
+          move them; without a finish the course is a loop.
         </p>
-        <div id="generate-section">
-          <div class="row">
-            <button id="set-start">Set start</button>
-            <button id="set-finish">Set finish</button>
-            <label class="control len-control">
-              <span>Length km</span>
-              <input type="number" id="gen-length" value="8" min="1" max="42" step="0.5" />
-            </label>
-          </div>
-          <p class="hint">
-            Drag the markers to move them. Without a finish the course is a loop.
-          </p>
-          <label class="control">
-            <span>More places ↔ more direct</span>
-            <input type="range" id="gen-places" min="0" max="100" value="50" />
+        <div class="row wrap">
+          <button id="set-start">Set start</button>
+          <button id="set-finish">Set finish</button>
+          <label class="control len-control">
+            <span>Length km</span>
+            <input type="number" id="gen-length" value="8" min="1" max="42" step="0.5" />
           </label>
-          <label class="control">
-            <span>Pedestrian only ↔ roads too</span>
-            <input type="range" id="gen-pedestrian" min="0" max="100" value="30" />
-          </label>
-          <label class="control">
-            <span>Historic centre ↔ outskirts too</span>
-            <input type="range" id="gen-centre" min="0" max="100" value="50" />
-          </label>
-          <label class="control">
-            <span>Twists and turns ↔ circular</span>
-            <input type="range" id="gen-twists" min="0" max="100" value="25" />
-          </label>
-          <div class="row">
-            <button id="gen-run" disabled>Generate</button>
-            <button id="gen-cancel" hidden>Cancel</button>
-          </div>
-          <p class="hint" id="gen-status" hidden></p>
-          <div class="row area-row">
-            <label class="control len-control">
-              <span>Area km</span>
-              <input type="number" id="area-radius" value="3" min="1" max="10" step="0.5" />
-            </label>
-            <button id="area-download" disabled>Download path network</button>
-          </div>
-          <p class="hint">
-            Downloads the paths around the start once; generating inside a saved area skips the
-            unreliable Overpass servers.
-          </p>
-          <p class="hint" id="area-status" hidden></p>
-          <ul id="area-list" hidden></ul>
+          <button id="gen-run" disabled>Generate</button>
         </div>
-        <details id="upload-section">
-          <summary>Upload a course instead</summary>
-          <div class="row" id="gpx-row">
-            <label class="control">
-              <span>Course GPX</span>
-              <input type="file" id="gpx-input" accept=".gpx,application/gpx+xml" />
-            </label>
-            <label class="control">
-              <span>Tour JSON</span>
-              <input type="file" id="tour-input" accept=".json,application/json" />
-            </label>
-          </div>
-          <div class="row" id="places-row" hidden>
-            <label class="control lang-control">
-              <span>Local Wikipedia</span>
-              <input type="text" id="lang-input" value="sv" size="3" maxlength="7" />
-            </label>
-            <button id="find-places">Find places</button>
-          </div>
-        </details>
+        <p class="hint" id="gen-status" hidden></p>
         <p class="hint" id="status" hidden></p>
         <div id="text-controls" hidden>
           <div class="row">
-            <button id="fetch-texts">Fetch texts</button>
             <button id="export-tour">Save tour.json</button>
             <button id="export-gpx">GPX ⤓</button>
             <button id="save-phone" hidden>Save to phone</button>
@@ -131,10 +74,11 @@
           </p>
         </div>
         <label id="toggle-row" hidden><input type="checkbox" id="toggle-markers" checked /> Show place markers</label>
-        <div id="search-row" hidden>
+        <div id="search-row">
           <input type="search" id="name-search" placeholder="Add a place by name…" />
           <button id="search-btn">Search</button>
         </div>
+        <p class="hint" id="search-status" hidden></p>
         <ul id="search-results" hidden></ul>
         <div class="row" id="list-lang-row" hidden>
           <label class="control lang-control">
@@ -147,6 +91,65 @@
           </label>
         </div>
         <ol id="place-list"></ol>
+        <details class="section" id="settings-section">
+          <summary>Settings</summary>
+          <div class="section-body">
+            <label class="control lang-control">
+              <span>Local Wikipedia</span>
+              <input type="text" id="lang-input" value="sv" size="3" maxlength="7" />
+            </label>
+            <label class="control">
+              <span>More places ↔ more direct</span>
+              <input type="range" id="gen-places" min="0" max="100" value="50" />
+            </label>
+            <label class="control">
+              <span>Pedestrian only ↔ roads too</span>
+              <input type="range" id="gen-pedestrian" min="0" max="100" value="30" />
+            </label>
+            <label class="control">
+              <span>Historic centre ↔ outskirts too</span>
+              <input type="range" id="gen-centre" min="0" max="100" value="50" />
+            </label>
+            <label class="control">
+              <span>Twists and turns ↔ circular</span>
+              <input type="range" id="gen-twists" min="0" max="100" value="100" />
+            </label>
+            <div class="subgroup">
+              <h3>Path network</h3>
+              <div class="row">
+                <label class="control len-control">
+                  <span>Area km</span>
+                  <input type="number" id="area-radius" value="3" min="1" max="10" step="0.5" />
+                </label>
+                <button id="area-download" disabled>Download path network</button>
+              </div>
+              <p class="hint">
+                Downloads the paths around the start once; generating inside a saved area skips
+                the unreliable Overpass servers.
+              </p>
+              <p class="hint" id="area-status" hidden></p>
+              <ul id="area-list" hidden></ul>
+            </div>
+          </div>
+        </details>
+        <details class="section" id="upload-section">
+          <summary>Upload a course</summary>
+          <div class="section-body">
+            <div class="row" id="gpx-row">
+              <label class="control">
+                <span>Course GPX</span>
+                <input type="file" id="gpx-input" accept=".gpx,application/gpx+xml" />
+              </label>
+              <label class="control">
+                <span>Tour JSON</span>
+                <input type="file" id="tour-input" accept=".json,application/json" />
+              </label>
+            </div>
+            <div class="row" id="places-row" hidden>
+              <button id="find-places">Find places</button>
+            </div>
+          </div>
+        </details>
       </section>
     </div>
     <script type="module" src="/src/main.ts"></script>

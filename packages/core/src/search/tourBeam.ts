@@ -19,6 +19,8 @@ export interface TourSearchPlace {
   lon: number;
   /** Interest 0–100 from core/poi. */
   score: number;
+  /** A via: the course must collect this place, whatever it scores. */
+  required?: boolean;
 }
 
 export interface TourWeights {
@@ -98,7 +100,10 @@ export function snapPlacesToNodes(
   places: TourSearchPlace[],
   maxDistM = 60,
 ): SnappedPlace[] {
-  const byScore = [...places].sort((a, b) => b.score - a.score);
+  // Required places first, so the 64-place cap can never push one out.
+  const byScore = [...places].sort(
+    (a, b) => Number(b.required ?? false) - Number(a.required ?? false) || b.score - a.score,
+  );
   const out: SnappedPlace[] = [];
   const n = graph.nodeLat.length;
   for (const p of byScore) {
@@ -210,6 +215,19 @@ export function tourBeamSearch(
   // Reachability: a state that cannot reach the finish within maxLen is dead.
   const home = dijkstra(graph, [endNode]).dist;
 
+  // Required places: a course only finishes with all of them collected, and a
+  // state that can no longer reach a missing one and still get home is dead.
+  let reqLo = 0;
+  let reqHi = 0;
+  const reqChecks: { idx: number; distTo: Float64Array; toEnd: number }[] = [];
+  places.forEach((p, i) => {
+    if (!p.required) return;
+    if (i < 32) reqLo |= 1 << i;
+    else reqHi |= 1 << (i - 32);
+    const distTo = dijkstra(graph, [p.node]).dist;
+    reqChecks.push({ idx: i, distTo, toEnd: distTo[endNode]! });
+  });
+
   const nBuckets = Math.ceil(maxLen / bucketM) + 1;
   const buckets: State[][] = Array.from({ length: nBuckets }, () => []);
 
@@ -270,6 +288,17 @@ export function tourBeamSearch(
         const v = otherNode(e, s.node);
         const dist = s.dist + e.lengthM;
         if (dist + home[v]! > maxLen) continue;
+        if (reqChecks.length > 0) {
+          let dead = false;
+          for (const r of reqChecks) {
+            if (hasBit(s, r.idx)) continue;
+            if (dist + r.distTo[v]! + r.toEnd > maxLen) {
+              dead = true;
+              break;
+            }
+          }
+          if (dead) continue;
+        }
         const finishes = v === endNode && dist >= minLen && dist <= maxLen;
         let score = s.score - w.penalty * Math.max(0, e.penalty) * e.lengthM - centroidCost(ei);
         if (edgeUsed(s, ei)) score -= w.repeat * e.lengthM;
@@ -289,7 +318,7 @@ export function tourBeamSearch(
           viaEdge: ei,
         };
         collectAt(next, v);
-        if (finishes) {
+        if (finishes && (next.bitsLo & reqLo) === reqLo && (next.bitsHi & reqHi) === reqHi) {
           finished.push(next);
           continue;
         }
@@ -483,6 +512,9 @@ export function improveTourCourse(
   let best = scoreTourCourse(graph, edges, startNode, places, w, target, minSpacing);
   let budget = 40; // the score rises strictly, so this is belt and braces
   let startI = 0;
+  const requiredIds = places.filter((p) => p.required).map((p) => p.id);
+  const keepsRequired = (collected: CollectedPlace[]): boolean =>
+    requiredIds.every((id) => collected.some((c) => c.id === id));
 
   outer: while (budget > 0) {
     const nodes = pathNodes(graph, { edges, dirs: [] }, startNode);
@@ -511,7 +543,8 @@ export function improveTourCourse(
           if (
             scored.score > best.score &&
             scored.lengthM >= target * (1 - tolerance) &&
-            scored.lengthM <= target * (1 + tolerance)
+            scored.lengthM <= target * (1 + tolerance) &&
+            keepsRequired(scored.collected)
           ) {
             edges = candidate;
             best = scored;

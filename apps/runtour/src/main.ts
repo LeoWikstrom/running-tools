@@ -12,12 +12,19 @@ import {
   validateTour,
   type Tour,
 } from '@running/core/tour/types';
-import { deleteArea, listAreas, saveArea, saveAreaPlaces } from '@running/core/net/areaStore';
+import {
+  deleteArea,
+  findCoveringArea,
+  listAreas,
+  saveArea,
+  saveAreaPlaces,
+} from '@running/core/net/areaStore';
 import { fetchNetwork } from '@running/core/net/overpass';
 import { fetchCandidates, searchPlacesByName } from './places';
 import {
   fetchAreaCandidates,
   generateCourse,
+  generationCircle,
   refineCourse,
   regenerateCourse,
   type GenerationContext,
@@ -32,6 +39,7 @@ import { native, saveTourToPhone } from './native';
 import { translatorAvailable } from './translate';
 import { initShelf } from './shelf';
 import { fetchPlaceText, placeDisplayName, type PlaceText } from './texts';
+import { closeDialog, openDialog } from './ui/dialog';
 import { initSheet } from './ui/sheet';
 import { toast } from './ui/toast';
 
@@ -66,12 +74,10 @@ const status = el<HTMLParagraphElement>('status');
 const textControls = el<HTMLDivElement>('text-controls');
 const targetSlider = el<HTMLInputElement>('target-seconds');
 const targetOutput = el<HTMLOutputElement>('target-output');
-const fetchTextsBtn = el<HTMLButtonElement>('fetch-texts');
 const exportTourBtn = el<HTMLButtonElement>('export-tour');
 const exportGpxBtn = el<HTMLButtonElement>('export-gpx');
 const toggleRow = el<HTMLLabelElement>('toggle-row');
 const toggleMarkers = el<HTMLInputElement>('toggle-markers');
-const searchRow = el<HTMLDivElement>('search-row');
 const nameSearch = el<HTMLInputElement>('name-search');
 const searchBtn = el<HTMLButtonElement>('search-btn');
 const searchResults = el<HTMLUListElement>('search-results');
@@ -108,7 +114,8 @@ function setStatus(text: string): void {
 }
 
 function allPlaces(): Place[] {
-  return [...places, ...manual]
+  const pipelineIds = new Set(places.map((p) => p.id));
+  return [...places, ...manual.filter((m) => !pipelineIds.has(m.id))]
     .filter((p) => !removedIds.has(p.id))
     .sort((a, b) => a.d - b.d);
 }
@@ -145,6 +152,7 @@ function setCourse(name: string, points: GpxPoint[]): void {
   placesRow.hidden = false;
   genContext = null;
   setStatus('');
+  reflectGenButtons();
 }
 
 /** Swap the course's geometry in place, keeping places, texts and removals. */
@@ -177,6 +185,7 @@ function refineGeneratedCourse(removed: Place): void {
   );
   refining = true;
   setStatus('Updating the course around the removed place…');
+  toast('Updating course…');
   void (async () => {
     try {
       const sameEdges = (edges: number[]): boolean =>
@@ -223,10 +232,15 @@ function panToVisible(lat: number, lon: number): void {
   map.panTo(map.unproject(map.project([lat, lon], map.getZoom()).add(L.point(dx, dy)), map.getZoom()));
 }
 
-function markerFor(p: Place, isManual: boolean): L.CircleMarker {
+/** Pipeline places green, hand-pinned ones orange, must-pass vias blue. */
+const PLACE_COLOR = '#2d7a4f';
+const MANUAL_COLOR = '#b4762d';
+const VIA_COLOR = '#2d6fb4';
+
+function markerFor(p: Place, kind: 'place' | 'manual' | 'via'): L.CircleMarker {
   const marker = L.circleMarker([p.lat, p.lon], {
     radius: 5 + (p.score / 100) * 5,
-    color: isManual ? '#b4762d' : '#2d7a4f',
+    color: kind === 'via' ? VIA_COLOR : kind === 'manual' ? MANUAL_COLOR : PLACE_COLOR,
     fillOpacity: 0.6,
     weight: 2,
   });
@@ -323,11 +337,43 @@ function renderEditor(p: Place, body: HTMLElement): void {
   body.append(area, counts, row, src);
 }
 
+const placeMarkers = new Map<string, L.CircleMarker>();
+
+/** Swell a marker for a moment — the eye finds it among the dots. */
+let highlighted: { marker: L.CircleMarker; radius: number } | null = null;
+let highlightTimer: number | undefined;
+function highlightMarker(id: string): void {
+  const marker = placeMarkers.get(id);
+  if (!marker) return;
+  if (highlighted) {
+    highlighted.marker.setRadius(highlighted.radius);
+    highlighted.marker.setStyle({ weight: 2, fillOpacity: 0.6 });
+  }
+  clearTimeout(highlightTimer);
+  const radius = marker.getRadius();
+  highlighted = { marker, radius };
+  marker.setRadius(radius + 5);
+  marker.setStyle({ weight: 6, fillOpacity: 1 });
+  marker.bringToFront();
+  highlightTimer = window.setTimeout(() => {
+    marker.setRadius(radius);
+    marker.setStyle({ weight: 2, fillOpacity: 0.6 });
+    highlighted = null;
+  }, 1800);
+}
+
 function render(): void {
   markerLayer.clearLayers();
+  placeMarkers.clear();
   const manualIds = new Set(manual.map((m) => m.id));
+  const viaIds = new Set(vias.map(viaId));
   const list = allPlaces();
-  for (const p of list) markerFor(p, manualIds.has(p.id)).addTo(markerLayer);
+  for (const p of list) {
+    const kind = viaIds.has(p.id) ? 'via' : manualIds.has(p.id) ? 'manual' : 'place';
+    const marker = markerFor(p, kind).addTo(markerLayer);
+    marker.on('click', () => highlightMarker(p.id));
+    placeMarkers.set(p.id, marker);
+  }
 
   placeList.innerHTML = '';
   for (const p of list) {
@@ -357,7 +403,12 @@ function render(): void {
     body.appendChild(remove);
     details.append(summary, body);
     li.appendChild(details);
-    summary.addEventListener('click', () => panToVisible(p.lat, p.lon));
+    summary.addEventListener('click', () => {
+      // At click time the toggle has not happened: open means it is closing.
+      if (details.open) return;
+      panToVisible(p.lat, p.lon);
+      highlightMarker(p.id);
+    });
     placeList.appendChild(li);
   }
   const any = list.length > 0;
@@ -365,7 +416,6 @@ function render(): void {
   textControls.hidden = !any;
   previewControls.hidden = !any;
   el<HTMLDivElement>('list-lang-row').hidden = !any;
-  searchRow.hidden = course === null;
 }
 
 function recompute(): void {
@@ -523,7 +573,11 @@ async function runFindPlaces(): Promise<boolean> {
   }
 }
 
-findButton.addEventListener('click', () => void runFindPlaces());
+findButton.addEventListener('click', () =>
+  void (async () => {
+    if (await runFindPlaces()) await runFetchTexts();
+  })(),
+);
 
 async function runFetchTexts(): Promise<void> {
   const list = allPlaces().filter((p) => (texts.get(p.id)?.text.length ?? 0) === 0);
@@ -531,7 +585,6 @@ async function runFetchTexts(): Promise<void> {
     setStatus('Every place already has a text; use Refetch inside a place to redo one.');
     return;
   }
-  fetchTextsBtn.disabled = true;
   let done = 0;
   let missing = 0;
   for (const p of list) {
@@ -541,7 +594,6 @@ async function runFetchTexts(): Promise<void> {
     done++;
     setStatus(`Fetching texts ${done}/${list.length}…`);
   }
-  fetchTextsBtn.disabled = false;
   render();
   const summary =
     missing === 0
@@ -550,8 +602,6 @@ async function runFetchTexts(): Promise<void> {
   setStatus(summary);
   toast(summary);
 }
-
-fetchTextsBtn.addEventListener('click', () => void runFetchTexts());
 
 function buildTour(): Tour {
   const c = course!;
@@ -607,8 +657,48 @@ exportGpxBtn.addEventListener('click', () => {
   download(`${slug()}.gpx`, 'application/gpx+xml', tourToGpx(buildTour()));
 });
 
+// --- Must-pass places: picked before generating, the course routes past them.
+
+let vias: PlaceCandidate[] = [];
+const viaMarkers = new Map<string, L.CircleMarker>();
+
+const viaId = (c: PlaceCandidate): string => c.wikidataId ?? `name:${c.name.toLowerCase()}`;
+
+function addVia(c: PlaceCandidate): void {
+  const id = viaId(c);
+  if (viaMarkers.has(id)) return;
+  const marker = L.circleMarker([c.lat, c.lon], {
+    radius: 7,
+    color: VIA_COLOR,
+    fillOpacity: 0.9,
+  }).addTo(map);
+  marker.bindTooltip(`${c.name} — must-pass`);
+  const box = document.createElement('div');
+  box.innerHTML = `<strong>${c.name}</strong><br>must-pass place<br>`;
+  const remove = document.createElement('button');
+  remove.textContent = 'Remove';
+  remove.addEventListener('click', () => {
+    vias = vias.filter((v) => viaId(v) !== id);
+    marker.remove();
+    viaMarkers.delete(id);
+  });
+  box.appendChild(remove);
+  marker.bindPopup(box);
+  viaMarkers.set(id, marker);
+  vias.push(c);
+  searchResults.hidden = true;
+  searchResults.innerHTML = '';
+  nameSearch.value = '';
+  setSearchStatus('');
+  setStatus(`${c.name} added — the generated course will pass it.`);
+  toast(`${c.name} will be on the course.`);
+}
+
 function addManualPlace(c: PlaceCandidate): void {
-  if (!course) return;
+  if (!course) {
+    addVia(c);
+    return;
+  }
   const pass = firstPassProjection(course.lats, course.lons, c.lat, c.lon, MANUAL_CORRIDOR_M);
   if (!pass) {
     setStatus(`${c.name} is more than ${MANUAL_CORRIDOR_M} m from the course.`);
@@ -628,19 +718,42 @@ function addManualPlace(c: PlaceCandidate): void {
   searchResults.hidden = true;
   searchResults.innerHTML = '';
   nameSearch.value = '';
+  setSearchStatus('');
   recompute();
+  void (async () => {
+    const added = allPlaces().find((p) => p.id === id);
+    if (!added || (texts.get(id)?.text.length ?? 0) > 0) return;
+    setStatus(`Fetching the text for ${added.name}…`);
+    const got = await fetchPlaceText(added, narrationLang(), targetSeconds()).catch(() => null);
+    if (got) texts.set(id, got);
+    else setStatus(`No Wikipedia text found for ${added.name} — write one in the list.`);
+    render();
+  })();
+}
+
+const searchStatus = el<HTMLParagraphElement>('search-status');
+
+function setSearchStatus(text: string): void {
+  searchStatus.textContent = text;
+  searchStatus.hidden = text.length === 0;
 }
 
 searchBtn.addEventListener('click', () => {
   const text = nameSearch.value.trim();
-  if (!text || !course) return;
+  if (!text) return;
   searchBtn.disabled = true;
+  setSearchStatus('Searching…');
+  toast('Searching…');
   void (async () => {
     try {
       const found = await searchPlacesByName(text, langInput.value.trim().toLowerCase());
       searchResults.innerHTML = '';
       searchResults.hidden = found.length === 0;
-      if (found.length === 0) setStatus(`Nothing with coordinates found for “${text}”.`);
+      setSearchStatus(
+        found.length === 0
+          ? `Nothing with coordinates found for “${text}”.`
+          : `${found.length} found — pick one:`,
+      );
       for (const c of found) {
         const li = document.createElement('li');
         const btn = document.createElement('button');
@@ -650,7 +763,7 @@ searchBtn.addEventListener('click', () => {
         searchResults.appendChild(li);
       }
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      setSearchStatus(err instanceof Error ? err.message : String(err));
     } finally {
       searchBtn.disabled = false;
     }
@@ -770,7 +883,6 @@ const genPedestrian = el<HTMLInputElement>('gen-pedestrian');
 const genCentre = el<HTMLInputElement>('gen-centre');
 const genTwists = el<HTMLInputElement>('gen-twists');
 const genRun = el<HTMLButtonElement>('gen-run');
-const genCancel = el<HTMLButtonElement>('gen-cancel');
 const genStatus = el<HTMLParagraphElement>('gen-status');
 
 let genStart: { lat: number; lon: number } | null = null;
@@ -795,8 +907,32 @@ function reflectGenButtons(): void {
   setStartBtn.textContent = setting === 'start' ? 'Tap the map…' : 'Set start';
   setFinishBtn.textContent =
     setting === 'finish' ? 'Tap the map…' : genEnd ? 'Remove finish' : 'Set finish';
-  genRun.disabled = genStart === null || generation !== null;
+  genRun.textContent = generation ? 'Cancel' : course ? 'Clear' : 'Generate';
+  genRun.disabled = generation === null && course === null && genStart === null;
   areaDownload.disabled = genStart === null;
+}
+
+/** Back to the bare map: course, places and texts go; downloads and vias stay. */
+function clearCourse(): void {
+  stopPreview();
+  course = null;
+  genContext = null;
+  tourId = null;
+  candidates = [];
+  manual = [];
+  places = [];
+  removedIds.clear();
+  texts.clear();
+  openEditors.clear();
+  courseLine?.remove();
+  courseLine = null;
+  stats.hidden = true;
+  hint.hidden = false;
+  placesRow.hidden = true;
+  render();
+  setStatus('');
+  setGenStatus('');
+  reflectGenButtons();
 }
 
 setStartBtn.addEventListener('click', () => {
@@ -889,10 +1025,110 @@ map.on('contextmenu', (e: L.LeafletMouseEvent) => {
   L.popup({ closeButton: false }).setLatLng(e.latlng).setContent(box).openOn(map);
 });
 
+/** Dismissing the download prompt silences it for this start point only. */
+let areaPromptDismissedFor: string | null = null;
+
 genRun.addEventListener('click', () => {
+  if (generation) {
+    generation.cancel();
+    return;
+  }
+  if (course) {
+    clearCourse();
+    toast('Course cleared.');
+    return;
+  }
   if (!genStart) return;
-  genRun.disabled = true;
-  genCancel.hidden = false;
+  void (async () => {
+    // Like profile-course: Generate over a start no saved area covers offers
+    // the download first, since public Overpass servers are unreliable.
+    const { center, radiusM } = generationCircle(
+      genStart!,
+      genEnd,
+      Number(genLength.value) * 1000,
+    );
+    const key = `${genStart!.lat.toFixed(4)},${genStart!.lon.toFixed(4)}`;
+    const covered = await findCoveringArea(center, radiusM + 300).catch(() => null);
+    if (
+      covered ||
+      localStorage.getItem('runtour.skipAreaPrompt') ||
+      areaPromptDismissedFor === key
+    ) {
+      startGeneration();
+      return;
+    }
+    openAreaPrompt(center, radiusM + 300, key);
+  })();
+});
+
+function openAreaPrompt(
+  center: { lat: number; lon: number },
+  neededRadiusM: number,
+  startKey: string,
+): void {
+  let handled = false;
+  const box = document.createElement('div');
+  const neededKm = Math.max(Math.ceil((neededRadiusM / 1000) * 2) / 2, Number(areaRadius.value));
+  const text = document.createElement('p');
+  text.className = 'hint';
+  text.textContent =
+    'No downloaded path network covers this course. The public Overpass servers are slow and ' +
+    'sometimes down; downloading the area once makes generating here fast, reliable and offline. ' +
+    'Closing this searches without downloading.';
+  const row = document.createElement('div');
+  row.className = 'row';
+  const radiusLabel = document.createElement('label');
+  radiusLabel.className = 'control len-control';
+  radiusLabel.innerHTML = '<span>Area km</span>';
+  const radiusInput = document.createElement('input');
+  radiusInput.type = 'number';
+  radiusInput.min = '1';
+  radiusInput.max = '10';
+  radiusInput.step = '0.5';
+  radiusInput.value = String(Math.min(neededKm, 10));
+  radiusInput.addEventListener('change', () => (areaRadius.value = radiusInput.value));
+  radiusLabel.appendChild(radiusInput);
+  const downloadBtn = document.createElement('button');
+  downloadBtn.textContent = 'Download';
+  downloadBtn.addEventListener('click', () => {
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = 'Downloading…';
+    void downloadArea(center, Number(radiusInput.value) * 1000, (t) => {
+      text.textContent = t;
+      setAreaStatus(t);
+    })
+      .then(() => {
+        handled = true;
+        closeDialog();
+        startGeneration();
+      })
+      .catch((err: unknown) => {
+        text.textContent = err instanceof Error ? err.message : String(err);
+        downloadBtn.disabled = false;
+        downloadBtn.textContent = 'Download';
+      });
+  });
+  const never = document.createElement('button');
+  never.textContent = "Don't show again";
+  never.addEventListener('click', () => {
+    localStorage.setItem('runtour.skipAreaPrompt', '1');
+    handled = true;
+    closeDialog();
+    startGeneration();
+  });
+  row.append(radiusLabel, downloadBtn, never);
+  box.append(text, row);
+  openDialog('Download the path network?', box, () => {
+    if (handled) return;
+    // ✕, Esc or the backdrop: generation goes ahead, and this start point
+    // stops asking.
+    areaPromptDismissedFor = startKey;
+    startGeneration();
+  });
+}
+
+function startGeneration(): void {
+  if (!genStart) return;
   generation = generateCourse(
     {
       start: genStart,
@@ -904,6 +1140,13 @@ genRun.addEventListener('click', () => {
       centreSlider: Number(genCentre.value),
       twistSlider: Number(genTwists.value),
       requireLang: nativeOnly() ? narrationLang() : null,
+      vias: vias.map((v) => ({
+        id: viaId(v),
+        name: v.name,
+        lat: v.lat,
+        lon: v.lon,
+        score: Math.max(interestScore(v), 30),
+      })),
     },
     (text, fraction) => setGenStatus(`${text} ${(fraction * 100).toFixed(0)} %`),
   );
@@ -913,6 +1156,9 @@ genRun.addEventListener('click', () => {
       const points: GpxPoint[] = generated.points.map(([lat, lon]) => ({ lat, lon, ele: null }));
       setCourse('Generated course', points);
       genContext = generated.context ?? null;
+      // The must-pass places are on the course now; pin them so they stay in
+      // the tour even if the corridor pipeline scores them out.
+      for (const v of vias) addManualPlace(v);
       render();
       setGenStatus(
         `${(generated.lengthM / 1000).toFixed(2)} km touching ${generated.collected.length} places.`,
@@ -928,13 +1174,11 @@ genRun.addEventListener('click', () => {
       else setGenStatus('');
     })
     .finally(() => {
-      genCancel.hidden = true;
       generation = null;
       reflectGenButtons();
     });
-});
-
-genCancel.addEventListener('click', () => generation?.cancel());
+  reflectGenButtons();
+}
 
 // --- Offline path network: download the area around the start once; getNetwork
 // serves generation from a saved area without touching Overpass.
@@ -971,33 +1215,32 @@ async function renderAreas(): Promise<void> {
   );
 }
 
+/** Fetch and store the network and places of one circle, reporting as it goes. */
+async function downloadArea(
+  center: { lat: number; lon: number },
+  radiusM: number,
+  onStatus: (text: string) => void,
+): Promise<void> {
+  onStatus('Downloading the path network… this can take a while.');
+  const response = await fetchNetwork(center, radiusM, { headerTimeoutMs: 120_000 });
+  const area = await saveArea(center, radiusM, response);
+  onStatus('Network saved. Fetching the places in the area…');
+  try {
+    const found = await fetchAreaCandidates(center, radiusM, langInput.value.trim().toLowerCase());
+    await saveAreaPlaces(area.id, found);
+    onStatus(`Area saved with ${found.length} places — courses here now generate offline.`);
+    toast(`Area saved with ${found.length} places.`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    onStatus(`Network saved, but the places fetch failed (${message}) — download again.`);
+  }
+  await renderAreas();
+}
+
 areaDownload.addEventListener('click', () => {
   if (!genStart) return;
-  const center = { ...genStart };
-  const radius = Number(areaRadius.value) * 1000;
   areaDownload.disabled = true;
-  setAreaStatus('Downloading the path network… this can take a while.');
-  fetchNetwork(center, radius, { headerTimeoutMs: 120_000 })
-    .then(async (response) => {
-      const area = await saveArea(center, radius, response);
-      setAreaStatus('Network saved. Fetching the places in the area…');
-      try {
-        const found = await fetchAreaCandidates(
-          center,
-          radius,
-          langInput.value.trim().toLowerCase(),
-        );
-        await saveAreaPlaces(area.id, found);
-        setAreaStatus(
-          `Area saved with ${found.length} places — courses here now generate offline.`,
-        );
-        toast(`Area saved with ${found.length} places.`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setAreaStatus(`Network saved, but the places fetch failed (${message}) — download again.`);
-      }
-      await renderAreas();
-    })
+  void downloadArea({ ...genStart }, Number(areaRadius.value) * 1000, setAreaStatus)
     .catch((err: unknown) => setAreaStatus(err instanceof Error ? err.message : String(err)))
     .finally(() => reflectGenButtons());
 });
