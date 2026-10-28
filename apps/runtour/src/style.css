@@ -21,6 +21,18 @@
   accent-color: var(--accent);
 }
 
+/* The bus build of the same codebase wears Västtrafik-ish blue. */
+body.variant-bus {
+  --accent: #1d5fa8;
+  --accent-deep: #164a85;
+  --accent-muted: light-dark(#4a6c94, #93b4d8);
+}
+
+body.variant-bus .run-only,
+body.variant-run .bus-only {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;

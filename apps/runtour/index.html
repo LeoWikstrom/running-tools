@@ -45,11 +45,11 @@
           <button id="native-only-info" class="info" aria-label="About this option" hidden>ⓘ</button>
         </label>
         <p class="hint" id="course-stats" hidden></p>
-        <p class="hint" id="hint">
+        <p class="hint run-only" id="hint">
           Long-press the map (or Set start) to place a start, then Generate. Drag the markers to
           move them; without a finish the course is a loop.
         </p>
-        <div class="row wrap">
+        <div class="row wrap run-only">
           <button id="set-start">Set start</button>
           <button id="set-finish">Set finish</button>
           <label class="control len-control">
@@ -57,6 +57,18 @@
             <input type="number" id="gen-length" value="8" min="1" max="42" step="0.5" />
           </label>
           <button id="gen-run">Generate</button>
+        </div>
+        <div id="bus-section" class="bus-only">
+          <p class="hint" id="bus-hint">
+            Pan the map to where you ride, list the bus lines there and pick one — the places
+            along the route and their texts follow by themselves.
+          </p>
+          <div class="row">
+            <button id="bus-find">Find bus lines here</button>
+            <button id="bus-clear" hidden>Clear route</button>
+          </div>
+          <p class="hint" id="bus-status" hidden></p>
+          <ul id="bus-list" hidden></ul>
         </div>
         <p class="hint" id="gen-status" hidden></p>
         <p class="hint" id="status" hidden></p>
@@ -107,23 +119,23 @@
               <span>Local Wikipedia</span>
               <input type="text" id="lang-input" value="sv" size="3" maxlength="7" />
             </label>
-            <label class="control">
+            <label class="control run-only">
               <span>More places ↔ more direct</span>
               <input type="range" id="gen-places" min="0" max="100" value="50" />
             </label>
-            <label class="control">
+            <label class="control run-only">
               <span>Pedestrian only ↔ roads too</span>
               <input type="range" id="gen-pedestrian" min="0" max="100" value="30" />
             </label>
-            <label class="control">
+            <label class="control run-only">
               <span>Historic centre ↔ outskirts too</span>
               <input type="range" id="gen-centre" min="0" max="100" value="50" />
             </label>
-            <label class="control">
+            <label class="control run-only">
               <span>Twists and turns ↔ circular</span>
               <input type="range" id="gen-twists" min="0" max="100" value="100" />
             </label>
-            <div class="subgroup">
+            <div class="subgroup run-only">
               <h3>Path network</h3>
               <div class="row">
                 <label class="control len-control">

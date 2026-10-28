@@ -17,8 +17,11 @@ import {
   findCoveringArea,
   listAreas,
   saveArea,
+  saveAreaBuildings,
   saveAreaPlaces,
 } from '@running/core/net/areaStore';
+import type { BuildingPoly } from '@running/core/geo/los';
+import { fetchAreaBuildings } from '@running/core/poi/buildings';
 import { fetchNetwork } from '@running/core/net/overpass';
 import { fetchCandidates, searchPlacesByName } from './places';
 import {
@@ -41,6 +44,8 @@ import { initRunMode } from './run';
 import { initShelf } from './shelf';
 import { fetchPlaceText, placeDisplayName, type PlaceText } from './texts';
 import { closeDialog, openDialog } from './ui/dialog';
+import { APP_NAME, PLACE_COLOR, THEME_COLOR, VARIANT, VARIANT_DEFAULTS } from './variant';
+import { initBusLines } from './bus';
 import { initLocate } from './locate';
 import { fitVisible, panToVisible } from './ui/visibleMap';
 import { initSheet } from './ui/sheet';
@@ -54,6 +59,11 @@ const nativeOnly = (): boolean =>
 
 const hasNarrationPage = (c: { wikipedia?: { lang: string }; wikipedias?: { lang: string }[] }): boolean =>
   [c.wikipedia, ...(c.wikipedias ?? [])].some((w) => w?.lang === narrationLang());
+
+document.body.classList.add(`variant-${VARIANT}`);
+document.title = APP_NAME;
+document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR);
+document.querySelector('#controls h1')!.textContent = APP_NAME;
 
 const sheet = document.getElementById('sheet')!;
 const handle = document.getElementById('sheet-handle')!;
@@ -100,6 +110,8 @@ let course: Course | null = null;
 let tourId: string | null = null;
 let courseLine: L.Polyline | null = null;
 let candidates: PlaceCandidate[] = [];
+/** Footprints along the course; empty means line of sight is not filtered. */
+let buildings: BuildingPoly[] = [];
 /** Places added by hand; they bypass the corridor and the thinning. */
 let manual: Place[] = [];
 let places: Place[] = [];
@@ -139,6 +151,7 @@ function setCourse(name: string, points: GpxPoint[]): void {
   course = { name, points, lats, lons, distance };
   tourId = null;
   candidates = [];
+  buildings = [];
   manual = [];
   places = [];
   removedIds.clear();
@@ -147,7 +160,7 @@ function setCourse(name: string, points: GpxPoint[]): void {
   courseLine?.remove();
   courseLine = L.polyline(
     lats.map((lat, i) => [lat, lons[i]!] as [number, number]),
-    { color: '#2d7a4f', weight: 4 },
+    { color: PLACE_COLOR, weight: 4 },
   ).addTo(map);
   fitVisible(map, sheet, courseLine.getBounds());
   stats.textContent = `${name} — ${(distance / 1000).toFixed(1)} km, ${points.length} points`;
@@ -173,7 +186,7 @@ function updateCourseGeometry(pts: [number, number][]): void {
   courseLine?.remove();
   courseLine = L.polyline(
     lats.map((lat, i) => [lat, lons[i]!] as [number, number]),
-    { color: '#2d7a4f', weight: 4 },
+    { color: PLACE_COLOR, weight: 4 },
   ).addTo(map);
   stats.textContent = `${course.name} — ${(distance / 1000).toFixed(1)} km, ${points.length} points`;
 }
@@ -225,10 +238,9 @@ function refineGeneratedCourse(removed: Place): void {
   })();
 }
 
-/** Pipeline places green, hand-pinned ones orange, must-pass vias blue. */
-const PLACE_COLOR = '#2d7a4f';
+/** Pipeline places wear the accent, hand-pinned ones orange, must-pass vias teal. */
 const MANUAL_COLOR = '#b4762d';
-const VIA_COLOR = '#2d6fb4';
+const VIA_COLOR = VARIANT === 'bus' ? '#1f8a8a' : '#2d6fb4';
 
 function markerFor(p: Place, kind: 'place' | 'manual' | 'via'): L.CircleMarker {
   const marker = L.circleMarker([p.lat, p.lon], {
@@ -415,7 +427,14 @@ function recompute(): void {
   if (!course) return;
   if (candidates.length > 0) {
     const pool = nativeOnly() ? candidates.filter(hasNarrationPage) : candidates;
-    places = buildPlaces(course.lats, course.lons, pool, {}, removedIds);
+    places = buildPlaces(
+      course.lats,
+      course.lons,
+      pool,
+      { leadDistance: VARIANT_DEFAULTS.leadDistance, minSpacing: VARIANT_DEFAULTS.minSpacing },
+      removedIds,
+      buildings,
+    );
   } else {
     places = places.filter((p) => !removedIds.has(p.id));
   }
@@ -551,6 +570,7 @@ async function runFindPlaces(): Promise<boolean> {
       setStatus,
     );
     candidates = report.candidates;
+    buildings = report.buildings;
     recompute();
     if (report.failures.length > 0) {
       setStatus(
@@ -609,7 +629,11 @@ function buildTour(): Tour {
       points: c.points.map((p) => (p.ele === null ? [p.lat, p.lon] : [p.lat, p.lon, p.ele])),
       distance: c.distance,
     },
-    settings: { ...DEFAULT_TOUR_SETTINGS, targetSeconds: targetSeconds() },
+    settings: {
+      ...DEFAULT_TOUR_SETTINGS,
+      ...VARIANT_DEFAULTS,
+      targetSeconds: targetSeconds(),
+    },
     places: allPlaces().map((p) => {
       const t = texts.get(p.id);
       return {
@@ -689,6 +713,11 @@ function addVia(c: PlaceCandidate): void {
 
 function addManualPlace(c: PlaceCandidate): void {
   if (!course) {
+    if (VARIANT === 'bus') {
+      // No generator consumes vias in the bus build; places need a route first.
+      setSearchStatus('Pick a bus line first, then add places along it.');
+      return;
+    }
     addVia(c);
     return;
   }
@@ -705,7 +734,7 @@ function addManualPlace(c: PlaceCandidate): void {
     id,
     score: Math.max(interestScore(c), 1),
     d: pass.along,
-    triggerD: Math.max(0, pass.along - 30),
+    triggerD: Math.max(0, pass.along - VARIANT_DEFAULTS.leadDistance),
     offset: pass.offset,
   });
   searchResults.hidden = true;
@@ -771,6 +800,11 @@ nameSearch.addEventListener('keydown', (e) => {
 
 const previewControls = el<HTMLDivElement>('preview-controls');
 const paceInput = el<HTMLInputElement>('pace-input');
+const defaultPace = (): string => {
+  const s = VARIANT_DEFAULTS.paceSecPerKm;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+paceInput.value = defaultPace();
 const previewFast = el<HTMLInputElement>('preview-fast');
 previewFast.addEventListener('change', () => {
   preview?.setSpeed?.(previewFast.checked ? 10 : 1);
@@ -786,13 +820,15 @@ previewPause.addEventListener('click', () => {
   previewPause.textContent = previewPaused ? 'Resume' : 'Pause';
 });
 const previewNote = el<HTMLParagraphElement>('preview-note');
+const PREVIEW_LABEL = VARIANT === 'bus' ? 'Preview ride' : 'Preview run';
+previewBtn.textContent = PREVIEW_LABEL;
 
 let preview: PreviewHandle | null = null;
 let runnerMarker: L.CircleMarker | null = null;
 
 function parsePace(value: string): number {
   const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
-  if (!m) return 330;
+  if (!m) return VARIANT_DEFAULTS.paceSecPerKm;
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
@@ -810,7 +846,7 @@ function stopPreview(): void {
   preview = null;
   runnerMarker?.remove();
   runnerMarker = null;
-  previewBtn.textContent = 'Preview run';
+  previewBtn.textContent = PREVIEW_LABEL;
   previewNote.hidden = true;
   previewPause.hidden = true;
   previewPaused = false;
@@ -913,6 +949,7 @@ function clearCourse(): void {
   genContext = null;
   tourId = null;
   candidates = [];
+  buildings = [];
   manual = [];
   places = [];
   removedIds.clear();
@@ -990,8 +1027,9 @@ map.on('click', (e: L.LeafletMouseEvent) => {
   reflectGenButtons();
 });
 
-// Long press on a phone, right click with a mouse.
-map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+// Long press on a phone, right click with a mouse. Start/finish pins belong
+// to the generator, which the bus build replaces with the line picker.
+if (VARIANT === 'run') map.on('contextmenu', (e: L.LeafletMouseEvent) => {
   const box = document.createElement('div');
   box.className = 'map-menu';
   const startBtn = document.createElement('button');
@@ -1231,6 +1269,15 @@ async function downloadArea(
     const message = err instanceof Error ? err.message : String(err);
     onStatus(`Network saved, but the places fetch failed (${message}) — download again.`);
   }
+  try {
+    onStatus('Fetching the buildings for line of sight…');
+    const footprints = await fetchAreaBuildings(center, radiusM, { headerTimeoutMs: 120_000 });
+    await saveAreaBuildings(area.id, footprints);
+    onStatus(`Area saved: buildings too (${footprints.length}).`);
+  } catch {
+    // Without footprints the area still works; line of sight just stays off.
+    onStatus('Area saved; the buildings fetch failed, so line of sight is off here.');
+  }
   await renderAreas();
 }
 
@@ -1243,6 +1290,23 @@ areaDownload.addEventListener('click', () => {
 });
 
 void renderAreas();
+
+if (VARIANT === 'bus') {
+  initBusLines({
+    map,
+    onRoute: (name, points) => {
+      setCourse(name, points);
+      render();
+      void (async () => {
+        if (await runFindPlaces()) await runFetchTexts();
+      })();
+    },
+    onClear: () => {
+      clearCourse();
+      toast('Route cleared.');
+    },
+  });
+}
 
 const runMode = initRunMode({
   map,

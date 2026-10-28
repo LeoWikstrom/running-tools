@@ -33,6 +33,8 @@ jobs:
             app=$(basename "$(dirname "$dist")")
             cp -r "$dist" "_site/$app"
           done
+          # The bus variant builds from the runtour codebase into dist-bus.
+          cp -r apps/runtour/dist-bus _site/bustour
       - uses: actions/upload-pages-artifact@v3
 
   deploy:

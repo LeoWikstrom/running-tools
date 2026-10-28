@@ -3,7 +3,16 @@ import {
   DEFAULT_RUNTIME_SETTINGS,
   TourRuntime,
   type RuntimeEvent,
+  type RuntimeSettings,
 } from '@running/core/tour/runtime';
+import { VARIANT_DEFAULTS } from './variant';
+
+/** The preview plays with the variant's trigger geometry, like the phone will. */
+const RUNTIME_SETTINGS: RuntimeSettings = {
+  ...DEFAULT_RUNTIME_SETTINGS,
+  triggerWindowM: VARIANT_DEFAULTS.triggerWindowM,
+  dropAfterM: VARIANT_DEFAULTS.dropAfterM,
+};
 
 export interface PreviewPlace {
   id: string;
@@ -61,7 +70,7 @@ export function startSimulatedPreview(
     cum[i] = cum[i - 1]! + haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
   }
   const total = cum[cum.length - 1]!;
-  const rt = new TourRuntime(lats, lons, places, DEFAULT_RUNTIME_SETTINGS);
+  const rt = new TourRuntime(lats, lons, places, RUNTIME_SETTINGS);
   let factor = speedFactor;
   const metresPerSecond = (): number => (1000 / paceSecPerKm) * factor;
 
@@ -143,7 +152,7 @@ export function startGpsPreview(
   lang: string,
   cb: PreviewCallbacks,
 ): PreviewHandle {
-  const rt = new TourRuntime(lats, lons, places, DEFAULT_RUNTIME_SETTINGS);
+  const rt = new TourRuntime(lats, lons, places, RUNTIME_SETTINGS);
   let stopped = false;
   let paused = false;
 

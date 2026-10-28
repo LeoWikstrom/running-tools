@@ -1,5 +1,7 @@
-import { findCoveringArea, loadAreaPlaces } from '@running/core/net/areaStore';
+import { findCoveringArea, loadAreaBuildings, loadAreaPlaces } from '@running/core/net/areaStore';
 import { haversineMeters } from '@running/core/geo';
+import type { BuildingPoly } from '@running/core/geo/los';
+import { fetchBuildings } from '@running/core/poi/buildings';
 import { fetchOsmPlaces, elementsToCandidates } from '@running/core/poi/osm';
 import {
   geosearch,
@@ -16,6 +18,8 @@ const OSM_CORRIDOR_M = 150;
 
 export interface FetchReport {
   candidates: PlaceCandidate[];
+  /** Footprints for line-of-sight; empty when unknown (old areas, fetch failure). */
+  buildings: BuildingPoly[];
   failures: string[];
 }
 
@@ -50,9 +54,15 @@ export async function fetchCandidates(
     const stored = await loadAreaPlaces(area.id);
     if (stored && stored.length > 0) {
       onProgress('Places from the downloaded area.');
-      return { candidates: stored, failures: [] };
+      // Areas from before buildings existed simply skip line of sight.
+      const buildings = (await loadAreaBuildings(area.id)) ?? [];
+      return { candidates: stored, buildings, failures: [] };
     }
   }
+
+  // Footprints ride along with the sources; losing them only loses the
+  // line-of-sight filter, so a failure is reported but not fatal.
+  const buildingsPromise = fetchBuildings(lats, lons, OSM_CORRIDOR_M).catch(() => null);
 
   const centers = sampleCenters(lats, lons, CENTER_RADIUS_M);
   const langs = localLang && localLang !== 'en' ? ['en', localLang] : ['en'];
@@ -97,7 +107,9 @@ export async function fetchCandidates(
   if (candidates.length === 0) {
     throw new Error(`Every source failed (${[...failed].join(', ')}). Are you online?`);
   }
-  return { candidates, failures: [...failed] };
+  const buildings = await buildingsPromise;
+  if (buildings === null) failed.add('buildings');
+  return { candidates, buildings: buildings ?? [], failures: [...failed] };
 }
 
 /** Name search on English plus the local Wikipedia. */

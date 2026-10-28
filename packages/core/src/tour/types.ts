@@ -13,6 +13,10 @@ export interface TourSettings {
   leadDistance: number;
   paceSecPerKm: number;
   targetSeconds: number;
+  /** Player trigger window; absent on older tours, the player uses its default. */
+  triggerWindowM?: number;
+  /** Player queue-drop distance; absent on older tours, the player defaults. */
+  dropAfterM?: number;
 }
 
 export interface TourPlace {
@@ -93,6 +97,11 @@ export function validateTour(json: unknown): Tour {
     'targetSeconds',
   ]) {
     if (typeof s[field] !== 'number') fail(`settings.${field} missing`);
+  }
+  for (const field of ['triggerWindowM', 'dropAfterM']) {
+    if (s[field] !== undefined && typeof s[field] !== 'number') {
+      fail(`settings.${field} must be a number`);
+    }
   }
 
   if (!Array.isArray(t.places)) fail('missing places');

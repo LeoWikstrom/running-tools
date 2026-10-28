@@ -163,8 +163,17 @@ public class RunService extends Service implements LocationListener {
                 places.add(tp);
                 rtPlaces.add(new RunRuntime.Place(tp.id, tp.triggerD));
             }
+            // The tour may carry player geometry (the bus variant needs wider
+            // windows); absent fields fall back to the defaults.
+            RunRuntime.Settings def = RunRuntime.Settings.defaults();
+            JSONObject settings = tour.optJSONObject("settings");
+            RunRuntime.Settings rtSettings = settings == null ? def : new RunRuntime.Settings(
+                    def.offCourseM, def.offCourseSec,
+                    settings.optDouble("triggerWindowM", def.triggerWindowM),
+                    settings.optDouble("dropAfterM", def.dropAfterM),
+                    def.maxBackwardM);
             runtime = new RunRuntime(lats, lons,
-                    rtPlaces.toArray(new RunRuntime.Place[0]), RunRuntime.Settings.defaults());
+                    rtPlaces.toArray(new RunRuntime.Place[0]), rtSettings);
         } catch (Exception e) {
             stopSelf();
             return;
