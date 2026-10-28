@@ -271,7 +271,8 @@ public class MainActivity extends Activity {
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (pm.isIgnoringBatteryOptimizations(getPackageName())) return;
         Toast.makeText(this,
-                "Allow RunTour to ignore battery optimisation so audio keeps playing with the screen off.",
+                "Allow " + getApplicationInfo().loadLabel(getPackageManager())
+                        + " to ignore battery optimisation so audio keeps playing with the screen off.",
                 Toast.LENGTH_LONG).show();
         try {
             startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
