@@ -37,9 +37,12 @@ import {
 } from './preview';
 import { native, saveTourToPhone } from './native';
 import { translatorAvailable } from './translate';
+import { initRunMode } from './run';
 import { initShelf } from './shelf';
 import { fetchPlaceText, placeDisplayName, type PlaceText } from './texts';
 import { closeDialog, openDialog } from './ui/dialog';
+import { initLocate } from './locate';
+import { fitVisible, panToVisible } from './ui/visibleMap';
 import { initSheet } from './ui/sheet';
 import { toast } from './ui/toast';
 
@@ -63,6 +66,7 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 
 const el = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
+const locate = initLocate(map, sheet, el<HTMLButtonElement>('locate-btn'));
 const gpxInput = el<HTMLInputElement>('gpx-input');
 const tourInput = el<HTMLInputElement>('tour-input');
 const stats = el<HTMLParagraphElement>('course-stats');
@@ -145,7 +149,7 @@ function setCourse(name: string, points: GpxPoint[]): void {
     lats.map((lat, i) => [lat, lons[i]!] as [number, number]),
     { color: '#2d7a4f', weight: 4 },
   ).addTo(map);
-  map.fitBounds(courseLine.getBounds(), { padding: [24, 24] });
+  fitVisible(map, sheet, courseLine.getBounds());
   stats.textContent = `${name} — ${(distance / 1000).toFixed(1)} km, ${points.length} points`;
   stats.hidden = false;
   hint.hidden = true;
@@ -219,17 +223,6 @@ function refineGeneratedCourse(removed: Place): void {
       refining = false;
     }
   })();
-}
-
-/** Centre on the part of the map the sheet leaves visible, not the window. */
-function panToVisible(lat: number, lon: number): void {
-  const r = sheet.getBoundingClientRect();
-  const wide = window.matchMedia('(min-width: 900px)').matches;
-  // The map centre must sit half the covered stretch past the place, so the
-  // place lands in the middle of what can be seen.
-  const dx = wide ? -r.width / 2 : 0;
-  const dy = wide ? 0 : Math.max(0, window.innerHeight - Math.max(0, r.top)) / 2;
-  map.panTo(map.unproject(map.project([lat, lon], map.getZoom()).add(L.point(dx, dy)), map.getZoom()));
 }
 
 /** Pipeline places green, hand-pinned ones orange, must-pass vias blue. */
@@ -406,7 +399,7 @@ function render(): void {
     summary.addEventListener('click', () => {
       // At click time the toggle has not happened: open means it is closing.
       if (details.open) return;
-      panToVisible(p.lat, p.lon);
+      panToVisible(map, sheet, p.lat, p.lon);
       highlightMarker(p.id);
     });
     placeList.appendChild(li);
@@ -847,7 +840,8 @@ previewBtn.addEventListener('click', () => {
     },
     onSpeak(place: PreviewPlace) {
       setStatus(`▶ ${place.name}`);
-      map.panTo([runnerMarker?.getLatLng().lat ?? 0, runnerMarker?.getLatLng().lng ?? 0]);
+      const at = runnerMarker?.getLatLng();
+      if (at) panToVisible(map, sheet, at.lat, at.lng);
     },
     onInfo(text: string) {
       setStatus(text);
@@ -908,7 +902,7 @@ function reflectGenButtons(): void {
   setFinishBtn.textContent =
     setting === 'finish' ? 'Tap the map…' : genEnd ? 'Remove finish' : 'Set finish';
   genRun.textContent = generation ? 'Cancel' : course ? 'Clear' : 'Generate';
-  genRun.disabled = generation === null && course === null && genStart === null;
+  genRun.disabled = false;
   areaDownload.disabled = genStart === null;
 }
 
@@ -1038,7 +1032,10 @@ genRun.addEventListener('click', () => {
     toast('Course cleared.');
     return;
   }
-  if (!genStart) return;
+  if (!genStart) {
+    toast('First put a start on the map — long-press where you want to begin.');
+    return;
+  }
   void (async () => {
     // Like profile-course: Generate over a start no saved area covers offers
     // the download first, since public Overpass servers are unreliable.
@@ -1247,7 +1244,15 @@ areaDownload.addEventListener('click', () => {
 
 void renderAreas();
 
-const shelf = initShelf(el<HTMLDivElement>('shelf'), applyTour, setStatus);
+const runMode = initRunMode({
+  map,
+  sheet,
+  controls: document.getElementById('controls')!,
+  locate,
+  onExit: () => shelf.refresh(),
+});
+const shelf = initShelf(el<HTMLDivElement>('shelf'), applyTour, setStatus, () => runMode.enter());
+runMode.maybeResume();
 const savePhoneBtn = el<HTMLButtonElement>('save-phone');
 if (native) {
   savePhoneBtn.hidden = false;
@@ -1255,9 +1260,10 @@ if (native) {
     if (!course) return;
     try {
       const id = saveTourToPhone(JSON.stringify(buildTour()));
-      setStatus(`Tour saved on the phone (${id}). Generate its audio below.`);
-      toast('Tour saved on the phone.');
+      setStatus(`Tour saved on the phone (${id}) — generating its audio…`);
+      toast('Tour saved — generating audio…');
       shelf.refresh();
+      shelf.generate(id);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     }

@@ -9,6 +9,8 @@ interface RunTourBridge {
   playFile(tourId: string, filename: string): boolean;
   stopPlayback(): void;
   startRun(tourId: string): void;
+  runState(): string;
+  runAction(action: string): void;
 }
 
 declare global {
@@ -89,6 +91,39 @@ export function stopPlayback(): void {
 
 export function startRun(tourId: string): void {
   native?.startRun(tourId);
+}
+
+export interface RunState {
+  started: boolean;
+  paused: boolean;
+  finished: boolean;
+  tourId: string;
+  tourName: string;
+  dNow: number;
+  tourDistance: number;
+  elapsedSeconds: number;
+  offCourse: boolean;
+  nextPlaceName: string | null;
+  nextPlaceRemainingM: number | null;
+  lat: number | null;
+  lon: number | null;
+  summary: { outcome: 'played' | 'dropped' | 'missed' | 'pending'; name: string }[];
+}
+
+/** The run service's state snapshot; null in a plain browser. */
+export function getRunState(): RunState | null {
+  if (!native?.runState) return null;
+  try {
+    return JSON.parse(native.runState()) as RunState;
+  } catch {
+    return null;
+  }
+}
+
+export type RunAction = 'pause' | 'skip' | 'repeat' | 'finish' | 'reset';
+
+export function sendRunAction(action: RunAction): void {
+  native?.runAction(action);
 }
 
 export function audioFilename(placeId: string): string {

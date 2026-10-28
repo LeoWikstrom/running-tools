@@ -39,11 +39,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".RunActivity"
-            android:exported="false"
-            android:launchMode="singleTop"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
 
         <service
             android:name=".RunService"

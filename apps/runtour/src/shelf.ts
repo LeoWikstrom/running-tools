@@ -12,16 +12,26 @@ import {
   synthesize,
 } from './native';
 
+export interface ShelfHandle {
+  refresh(): void;
+  /** Kick off audio generation for one stored tour, as its button would. */
+  generate(id: string): void;
+}
+
 /** The "on this phone" section: saved tours, audio generation, clip preview. */
 export function initShelf(
   container: HTMLElement,
   openTour: (tour: Tour) => void,
   setStatus: (text: string) => void,
-): { refresh: () => void } {
+  onRunStarted?: () => void,
+): ShelfHandle {
   if (!native) {
     container.hidden = true;
-    return { refresh: () => {} };
+    return { refresh: () => {}, generate: () => {} };
   }
+
+  /** The audio buttons' click actions by tour id, for generate(). */
+  const generators = new Map<string, () => void>();
 
   function generateAudio(id: string, progress: HTMLProgressElement): Promise<void> {
     return (async () => {
@@ -71,6 +81,7 @@ export function initShelf(
 
   function refresh(): void {
     container.innerHTML = '';
+    generators.clear();
     const tours = listTours();
     container.hidden = false;
     const heading = document.createElement('h2');
@@ -90,11 +101,14 @@ export function initShelf(
       const body = document.createElement('div');
 
       const row = document.createElement('div');
-      row.className = 'row';
+      row.className = 'row wrap';
       const run = document.createElement('button');
       run.textContent = 'Start run';
       run.className = 'start-run';
-      run.addEventListener('click', () => startRun(info.id));
+      run.addEventListener('click', () => {
+        startRun(info.id);
+        onRunStarted?.();
+      });
       row.appendChild(run);
       const open = document.createElement('button');
       open.textContent = 'Open';
@@ -105,18 +119,34 @@ export function initShelf(
           setStatus(err instanceof Error ? err.message : String(err));
         }
       });
-      const audio = document.createElement('button');
-      audio.textContent = 'Generate audio';
+      // No button: audio generates by itself after Save to phone.
       const progress = document.createElement('progress');
       progress.hidden = true;
-      audio.addEventListener('click', () => {
-        audio.disabled = true;
+      let generating = false;
+      const runGeneration = (): void => {
+        if (generating) return;
+        generating = true;
         void generateAudio(info.id, progress)
           .catch((err: unknown) => setStatus(err instanceof Error ? err.message : String(err)))
           .finally(() => {
-            audio.disabled = false;
+            generating = false;
             refresh();
           });
+      };
+      generators.set(info.id, runGeneration);
+      const rename = document.createElement('button');
+      rename.textContent = 'Rename';
+      rename.addEventListener('click', () => {
+        const name = prompt('New name for the tour', info.name)?.trim();
+        if (!name) return;
+        try {
+          const tour = validateTour(JSON.parse(getTourJson(info.id)));
+          tour.name = name;
+          saveTourToPhone(JSON.stringify(tour));
+          refresh();
+        } catch (err) {
+          setStatus(err instanceof Error ? err.message : String(err));
+        }
       });
       const del = document.createElement('button');
       del.textContent = 'Delete';
@@ -125,7 +155,7 @@ export function initShelf(
         deleteTour(info.id);
         refresh();
       });
-      row.append(open, audio, del);
+      row.append(open, rename, del);
       body.append(row, progress);
 
       const placesBox = document.createElement('div');
@@ -144,5 +174,10 @@ export function initShelf(
   }
 
   refresh();
-  return { refresh };
+  return {
+    refresh,
+    generate(id: string): void {
+      generators.get(id)?.();
+    },
+  };
 }

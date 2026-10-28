@@ -83,9 +83,13 @@ public class RunService extends Service implements LocationListener {
     private boolean ttsOk = false;
     private String playingId;
     private String lastPlayedId;
-    private boolean paused = false;
-    private boolean finished = false;
+    // Read from the WebView's JS bridge thread as well as the main thread.
+    private volatile boolean paused = false;
+    private volatile boolean finished = false;
+    private volatile double lastLat = Double.NaN;
+    private volatile double lastLon = Double.NaN;
     private long startedAt;
+    private long pausedAt;
 
     @Override
     public void onCreate() {
@@ -183,6 +187,8 @@ public class RunService extends Service implements LocationListener {
 
     @Override
     public void onLocationChanged(Location location) {
+        lastLat = location.getLatitude();
+        lastLon = location.getLongitude();
         if (paused || finished || runtime == null) return;
         double t = SystemClock.elapsedRealtime() / 1000.0;
         runtime.update(t, location.getLatitude(), location.getLongitude(), this::onRuntimeEvent);
@@ -298,11 +304,15 @@ public class RunService extends Service implements LocationListener {
     // Controls, shared by the notification and the run screen.
 
     public void setPaused(boolean value) {
+        if (paused == value) return;
         paused = value;
         if (paused) {
+            pausedAt = SystemClock.elapsedRealtime();
             locations.removeUpdates(this);
             stopClip();
         } else {
+            // The clock stood still while paused.
+            startedAt += SystemClock.elapsedRealtime() - pausedAt;
             requestLocation();
         }
         updateNotification();
@@ -366,6 +376,35 @@ public class RunService extends Service implements LocationListener {
         return runtime != null;
     }
 
+    public String tourId() {
+        return tourId;
+    }
+
+    public double lastLat() {
+        return lastLat;
+    }
+
+    public double lastLon() {
+        return lastLon;
+    }
+
+    /** Back to idle so a fresh run can start; the web UI calls this after the
+        summary has been read. */
+    public void reset() {
+        locations.removeUpdates(this);
+        stopClip();
+        if (wakeLock.isHeld()) wakeLock.release();
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        runtime = null;
+        places.clear();
+        paused = false;
+        finished = false;
+        tourId = null;
+        tourName = "";
+        lastLat = Double.NaN;
+        lastLon = Double.NaN;
+    }
+
     public boolean isPaused() {
         return paused;
     }
@@ -391,7 +430,8 @@ public class RunService extends Service implements LocationListener {
     }
 
     public long elapsedSeconds() {
-        return (SystemClock.elapsedRealtime() - startedAt) / 1000;
+        long end = paused ? pausedAt : SystemClock.elapsedRealtime();
+        return (end - startedAt) / 1000;
     }
 
     /** "name|metres" of the next pending place, or null. */
@@ -430,7 +470,7 @@ public class RunService extends Service implements LocationListener {
     }
 
     private Notification buildNotification(String text) {
-        Intent open = new Intent(this, RunActivity.class);
+        Intent open = new Intent(this, MainActivity.class);
         PendingIntent content = PendingIntent.getActivity(this, 0, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder b = new Notification.Builder(this, CHANNEL)
