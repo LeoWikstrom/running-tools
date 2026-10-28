@@ -1,5 +1,6 @@
 import { haversineMeters } from '../geo';
 import type { LatLon } from '../geo';
+import type { BuildingPoly } from '../geo/los';
 import type { PlaceCandidate } from '../poi/types';
 import { cacheGet, cacheSet, cacheSetOrThrow } from './cache';
 import type { OverpassResponse } from './overpass';
@@ -53,6 +54,7 @@ export async function deleteArea(id: string): Promise<StoredArea[]> {
   await cacheSet(INDEX_KEY, areas);
   await cacheSet(`area:${id}`, undefined);
   await cacheSet(`areaplaces:${id}`, undefined);
+  await cacheSet(`areabuildings:${id}`, undefined);
   return areas;
 }
 
@@ -63,6 +65,16 @@ export async function saveAreaPlaces(id: string, candidates: PlaceCandidate[]): 
 
 export async function loadAreaPlaces(id: string): Promise<PlaceCandidate[] | undefined> {
   return cacheGet<PlaceCandidate[]>(`areaplaces:${id}`);
+}
+
+/** Building footprints for line-of-sight, stored beside the network. Absent
+    on areas downloaded before they existed — treated as "no buildings known". */
+export async function saveAreaBuildings(id: string, buildings: BuildingPoly[]): Promise<void> {
+  await cacheSetOrThrow(`areabuildings:${id}`, buildings);
+}
+
+export async function loadAreaBuildings(id: string): Promise<BuildingPoly[] | undefined> {
+  return cacheGet<BuildingPoly[]>(`areabuildings:${id}`);
 }
 
 /** Smallest stored area whose circle fully covers the requested one. */

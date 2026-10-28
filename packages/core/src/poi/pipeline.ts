@@ -1,4 +1,5 @@
 import { haversineMeters } from '../geo';
+import { buildBuildingIndex, type BuildingPoly } from '../geo/los';
 import { hasSignal, interestScore, isExcludedType } from './score';
 import { DEFAULT_POI_SETTINGS, type Place, type PlaceCandidate, type PoiSettings } from './types';
 
@@ -78,6 +79,53 @@ export function firstPassProjection(
     along += segLen;
   }
   return firstPass ?? passBest;
+}
+
+/** How far around the first pass the eye gets to look, metres along the course. */
+const SIGHT_WINDOW_M = 150;
+/** Spacing of the sample points inside that window. */
+const SIGHT_STEP_M = 30;
+
+const OSM_WAY_URL = /openstreetmap\.org\/way\/(\d+)/;
+
+/** The candidate's own footprint id, so a building never occludes itself. */
+function osmWayId(c: PlaceCandidate): number | undefined {
+  for (const s of c.sources) {
+    if (s.kind !== 'osm') continue;
+    const m = OSM_WAY_URL.exec(s.url);
+    if (m) return Number(m[1]);
+  }
+  return undefined;
+}
+
+interface CoursePoints {
+  cum: Float64Array;
+  at(d: number): { lat: number; lon: number };
+}
+
+function coursePoints(lats: ArrayLike<number>, lons: ArrayLike<number>): CoursePoints {
+  const cum = new Float64Array(lats.length);
+  for (let i = 1; i < lats.length; i++) {
+    cum[i] = cum[i - 1]! + haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
+  }
+  return {
+    cum,
+    at(d: number) {
+      let lo = 0;
+      let hi = cum.length - 1;
+      while (lo + 1 < hi) {
+        const mid = (lo + hi) >> 1;
+        if (cum[mid]! <= d) lo = mid;
+        else hi = mid;
+      }
+      const segLen = cum[hi]! - cum[lo]!;
+      const f = segLen === 0 ? 0 : (d - cum[lo]!) / segLen;
+      return {
+        lat: lats[lo]! + f * (lats[hi]! - lats[lo]!),
+        lon: lons[lo]! + f * (lons[hi]! - lons[lo]!),
+      };
+    },
+  };
 }
 
 function normalizeName(name: string): string {
@@ -172,9 +220,29 @@ export function buildPlaces(
   settings: Partial<PoiSettings> = {},
   /** Place ids removed by hand; dropped before thinning so neighbours survive. */
   excludeIds?: ReadonlySet<string>,
+  /** Building footprints for line-of-sight filtering; absent, nothing is hidden. */
+  buildings?: BuildingPoly[],
 ): Place[] {
   const s: PoiSettings = { ...DEFAULT_POI_SETTINGS, ...settings };
   const merged = dedupeCandidates(candidates).filter((c) => hasSignal(c) && !isExcludedType(c));
+
+  // Line of sight: a place stays if it can be seen from *somewhere* in the
+  // window around its first pass — a corner building must not drop a place
+  // that is in plain view a few seconds earlier or later.
+  const losIndex = buildings && buildings.length > 0 ? buildBuildingIndex(buildings) : null;
+  const course = losIndex ? coursePoints(lats, lons) : null;
+  const visible = (c: PlaceCandidate, along: number): boolean => {
+    if (!losIndex || !course) return true;
+    const ownId = osmWayId(c);
+    const total = course.cum[course.cum.length - 1]!;
+    const from = Math.max(0, along - SIGHT_WINDOW_M);
+    const to = Math.min(total, along + SIGHT_WINDOW_M);
+    for (let d = from; d <= to; d += SIGHT_STEP_M) {
+      const p = course.at(d);
+      if (!losIndex.blocked(p.lat, p.lon, c.lat, c.lon, ownId)) return true;
+    }
+    return false;
+  };
 
   const placed: Place[] = [];
   for (const c of merged) {
@@ -184,6 +252,7 @@ export function buildPlaces(
     if (score <= 0) continue;
     const id = c.wikidataId ?? `${c.sources[0]?.kind ?? 'place'}:${normalizeName(c.name)}`;
     if (excludeIds?.has(id)) continue;
+    if (!visible(c, pass.along)) continue;
     placed.push({
       ...c,
       id,
