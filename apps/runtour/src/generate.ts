@@ -152,8 +152,9 @@ export function generateCourse(
 ): { promise: Promise<GeneratedCourse>; cancel: () => void } {
   let worker: Worker | null = null;
   let cancelled = false;
+  let cancelNow: ((e: Error) => void) | null = null;
 
-  const promise = (async (): Promise<GeneratedCourse> => {
+  const work = (async (): Promise<GeneratedCourse> => {
     const separation = params.end
       ? haversineMeters(params.start.lat, params.start.lon, params.end.lat, params.end.lon)
       : 0;
@@ -188,11 +189,19 @@ export function generateCourse(
     return { ...result, context: { ...request, edges: result.edges } };
   })();
 
+  // Cancel settles the caller's promise at once — a places or network fetch
+  // in flight cannot be interrupted, so it finishes in the background (into
+  // the cache) while the UI is already back.
+  const cancelGate = new Promise<never>((_, reject) => (cancelNow = reject));
+  work.catch(() => {}); // the race may already be settled when work loses
+  cancelGate.catch(() => {});
+
   return {
-    promise,
+    promise: Promise.race([work, cancelGate]),
     cancel(): void {
       cancelled = true;
       worker?.terminate();
+      cancelNow?.(new Error('cancelled'));
     },
   };
 }
