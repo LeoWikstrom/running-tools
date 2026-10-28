@@ -9,7 +9,12 @@ starting a new phase.
 - `apps/profile-course` — the race-profile course generator (see its own CLAUDE.md). Its
   non-UI modules were moved into core in phase 0; only `src/main.ts`, `src/session.ts`,
   `src/ui/`, `src/shared/messages.ts` and `src/search/worker.ts` remain.
-- `apps/runtour` — audio-guide preparation app (map, places, texts, tour.json). Accent green.
+- `apps/runtour` — audio-guide preparation app (map, places, texts, tour.json). One codebase,
+  two builds: the default run variant (accent green) and `--mode bus` → BusTour (blue, line
+  picker instead of the generator, bus pace/trigger defaults in `src/variant.ts`). `npm run
+  dev` serves run on 5173, `npm run dev:bus` bus on 5174; `npm run build` emits `dist/` and
+  `dist-bus/` (deployed to `/runtour/` and `/bustour/`). Changes to the app apply to both
+  variants — gate variant-specific UI with `.run-only`/`.bus-only` classes or `VARIANT`.
 - `android/runtour` — (phase 3) plain Java, Gradle-free build modelled on
   `~/sylvester/sylvester/build.sh` (aapt2, javac, d8, apksigner); WebView loads the runtour
   build from assets.
