@@ -14,6 +14,25 @@ KS_PASS="runtour"
 VERSION_NAME="${VERSION_NAME:-0.1}"
 VERSION_CODE="$(date +%Y%m%d%H)"   # grows with every build, so reinstalls upgrade in place
 
+# VARIANT=bus builds BusTour from the same sources: the dist-bus web build, a
+# blue icon/label, and its own application id so both apps install side by
+# side. R and the Java classes stay in se.leo.runtour — --rename-manifest-package
+# only rewrites the final manifest.
+VARIANT="${VARIANT:-run}"
+if [ "$VARIANT" = bus ]; then
+  APP_LABEL="BusTour"
+  ICON_COLOR="#1D5FA8"
+  DIST="dist-bus"
+  OUT="bustour.apk"
+  RENAME=(--rename-manifest-package se.leo.bustour)
+else
+  APP_LABEL="RunTour"
+  ICON_COLOR="#2D7A4F"
+  DIST="dist"
+  OUT="runtour.apk"
+  RENAME=()
+fi
+
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing tool: $1  (pkg install $2)"; exit 1; }; }
 need aapt2 aapt2
 need d8 d8
@@ -55,20 +74,24 @@ fi
 if [ "${SKIP_WEB:-0}" != 1 ]; then
   (cd ../../apps/runtour && npm run build)
 fi
-[ -f ../../apps/runtour/dist/index.html ] || { echo "apps/runtour/dist missing; run npm run build there"; exit 1; }
+[ -f "../../apps/runtour/$DIST/index.html" ] || { echo "apps/runtour/$DIST missing; run npm run build there"; exit 1; }
 rm -rf assets
 mkdir -p assets/www
-cp -r ../../apps/runtour/dist/. assets/www/
+cp -r "../../apps/runtour/$DIST/." assets/www/
 
 rm -rf build
 mkdir -p build/gen build/classes build/dex
 
-# 4. resources
-aapt2 compile --dir res -o build/res.zip
+# 4. resources, re-branded per variant
+cp -r res build/res-src
+sed -i "s/>RunTour</>$APP_LABEL</" build/res-src/values/strings.xml
+sed -i "s/#2D7A4F/$ICON_COLOR/" build/res-src/drawable/ic_launcher.xml
+aapt2 compile --dir build/res-src -o build/res.zip
 aapt2 link -o build/base.apk -I "$ANDROID_JAR" \
   --manifest AndroidManifest.xml -A assets --java build/gen \
   --min-sdk-version "$MIN_API" --target-sdk-version "$API" \
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" \
+  "${RENAME[@]}" \
   build/res.zip
 
 # 5. java -> class -> dex
@@ -82,8 +105,8 @@ python3 align.py build/base.apk build/dex/classes.dex build/aligned.apk
 
 # 7. sign
 apksigner sign --ks "$KS" --ks-key-alias runtour --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" \
-  --out build/runtour.apk build/aligned.apk
-apksigner verify build/runtour.apk
+  --out "build/$OUT" build/aligned.apk
+apksigner verify "build/$OUT"
 echo
-echo "built build/runtour.apk (versionCode $VERSION_CODE)"
-echo "install with:  termux-open build/runtour.apk"
+echo "built build/$OUT (versionCode $VERSION_CODE)"
+echo "install with:  termux-open build/$OUT"
