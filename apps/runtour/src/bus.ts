@@ -16,15 +16,19 @@ import { toast } from './ui/toast';
 const lineLabel = (line: BusLine): string =>
   line.ref && line.to ? `${line.ref} → ${line.to}` : line.name;
 
+// A deliberate button press can out-wait busy public mirrors, which often sit
+// silent well past the default 25 s before answering.
+const PATIENT = { headerTimeoutMs: 90_000 };
+
 async function fetchBusLines(center: L.LatLng, radiusM: number): Promise<BusLine[]> {
-  const key = `busroutes:v1:${center.lat.toFixed(3)},${center.lng.toFixed(3)},${Math.round(radiusM / 100)}`;
+  const key = `busroutes:v2:${center.lat.toFixed(3)},${center.lng.toFixed(3)},${Math.round(radiusM / 100)}`;
   const query = buildBusRoutesListQuery({ lat: center.lat, lon: center.lng }, radiusM);
-  const response = await fetchOverpass(query, key);
+  const response = await fetchOverpass(query, key, PATIENT);
   return relationsToBusLines(response.elements as unknown as OverpassRelation[]);
 }
 
 async function fetchBusLinePolyline(id: number): Promise<{ points: GpxPoint[]; gaps: number }> {
-  const response = await fetchOverpass(buildBusRouteGeomQuery(id), `busroute:v1:${id}`);
+  const response = await fetchOverpass(buildBusRouteGeomQuery(id), `busroute:v1:${id}`, PATIENT);
   const elements = response.elements as unknown as (OverpassRelation | OverpassGeomWay)[];
   const relation = elements.find((e) => e.type === 'relation' && e.id === id) as
     | OverpassRelation
@@ -62,7 +66,7 @@ export function initBusLines({ map, onRoute, onClear }: BusLinesOptions): void {
       5000,
     );
     find.disabled = true;
-    setBusStatus('Looking for bus lines…');
+    setBusStatus('Looking for bus lines… the public Overpass servers can take a minute.');
     void (async () => {
       try {
         const lines = await fetchBusLines(map.getCenter(), radiusM);

@@ -34,9 +34,12 @@ export interface OverpassGeomWay {
   geometry?: { lat: number; lon: number }[];
 }
 
+// Nearby ways first, then relations through membership (rel(bw)) — the direct
+// relation[...](around:...) form makes Overpass geometry-check every bus route
+// and routinely times out at the dispatcher.
 export function buildBusRoutesListQuery(center: LatLon, radiusMeters: number): string {
   const around = `(around:${Math.round(radiusMeters)},${center.lat.toFixed(6)},${center.lon.toFixed(6)})`;
-  return `[out:json][timeout:30];relation[type=route][route=bus]${around};out tags;`;
+  return `[out:json][timeout:30];way[highway]${around};rel(bw)[type=route][route=bus];out tags;`;
 }
 
 export function buildBusRouteGeomQuery(relationId: number): string {

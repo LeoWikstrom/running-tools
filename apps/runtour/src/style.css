@@ -18,6 +18,11 @@
   /* RunTour's accent is green — the sister app profile-course owns pink. */
   --accent: #2d7a4f;
   --accent-deep: #1f5c3a;
+}
+
+/* On body, not :root — declared on :root, var(--accent) would resolve against
+   the root's green before the bus build's body-level override can matter. */
+body {
   accent-color: var(--accent);
 }
 

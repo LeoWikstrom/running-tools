@@ -3,6 +3,7 @@ import { validateTour } from '@running/core/tour/types';
 import type { LocateHandle } from './locate';
 import { fitVisible } from './ui/visibleMap';
 import { getRunState, getTourJson, sendRunAction, type RunState } from './native';
+import { PLACE_COLOR } from './variant';
 
 export interface RunModeOptions {
   map: L.Map;
@@ -141,12 +142,12 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     try {
       const tour = validateTour(JSON.parse(getTourJson(tourId)));
       const points = tour.route.points.map((p) => [p[0], p[1]] as [number, number]);
-      courseLine = L.polyline(points, { color: '#2d7a4f', weight: 4 }).addTo(opts.map);
+      courseLine = L.polyline(points, { color: PLACE_COLOR, weight: 4 }).addTo(opts.map);
       placeLayer = L.layerGroup().addTo(opts.map);
       for (const p of tour.places) {
         L.circleMarker([p.lat, p.lon], {
           radius: 6,
-          color: '#2d7a4f',
+          color: PLACE_COLOR,
           fillOpacity: 0.6,
           weight: 2,
         })
