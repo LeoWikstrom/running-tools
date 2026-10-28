@@ -13,6 +13,9 @@ starting a new phase.
 - `android/runtour` — (phase 3) plain Java, Gradle-free build modelled on
   `~/sylvester/sylvester/build.sh` (aapt2, javac, d8, apksigner); WebView loads the runtour
   build from assets.
+- `site/` — static landing page for GitHub Pages. `.github/workflows/pages.yml` builds every
+  `apps/*` on push to main and deploys each `dist` to `/<app>/`; a new app just needs a card
+  in `site/index.html`. The APK is a GitHub Release asset (`android/runtour/release.sh`).
 
 Conventions: finish a phase → `npm test` and `npm run lint` from the root → commit with the
 phase name → next phase. Dev servers bind 0.0.0.0 for phone testing in Termux.
@@ -24,5 +27,5 @@ RunRuntime.java on the JVM. The trigger algorithm lives twice — `core/tour/run
 `RunRuntime.java` — change both or the replay fails.
 
 Phases 0–6 are built; still to do from the plan: the phase 4 field test on a real run
-(tune leadDistance and the trigger window), static deploy, and phase 7 (LLM rewriting,
-cloud TTS, Garmin export).
+(tune leadDistance and the trigger window), the first GitHub push (static deploy is prepared —
+checklist in README.md), and phase 7 (LLM rewriting, cloud TTS, Garmin export).

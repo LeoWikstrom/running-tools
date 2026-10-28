@@ -1,0 +1,109 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: light dark;
+  --page-bg: light-dark(#f2f3f5, #1c1e21);
+  --panel-bg: light-dark(#ffffff, #26282c);
+  --edge: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.14));
+  --muted: light-dark(rgb(0 0 0 / 0.55), rgb(255 255 255 / 0.6));
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--page-bg);
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 3rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+header p {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+}
+
+.apps {
+  list-style: none;
+  margin: 2rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.app {
+  background: var(--panel-bg);
+  border: 1px solid var(--edge);
+  border-top: 4px solid var(--app-accent);
+  border-radius: 12px;
+  padding: 1.25rem 1.4rem 1.4rem;
+}
+
+.app h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.app h2 a {
+  color: var(--app-accent);
+  text-decoration: none;
+}
+
+.app h2 a:hover {
+  text-decoration: underline;
+}
+
+.app p {
+  margin: 0.5rem 0 1rem;
+}
+
+.app nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.button {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  background: var(--app-accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.button:hover {
+  background: var(--app-accent-deep);
+}
+
+.button.secondary {
+  background: transparent;
+  color: var(--app-accent);
+  border: 1px solid var(--app-accent);
+}
+
+.button.secondary:hover {
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+}
+
+footer {
+  margin-top: 2.5rem;
+  text-align: center;
+}
+
+footer a {
+  color: var(--muted);
+}

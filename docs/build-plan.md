@@ -197,7 +197,8 @@ Seven phases; each ends in something usable. Claude Code finishes one phase, run
 **Phase 5 – Web preview and polish** (1 day)
 
 - [ ] Preview with simulated position and Web Speech API in `apps/runtour`.
-- [ ] Error states, offline, languages; static deploy of the web app.
+- [ ] Error states, offline, languages; static deploy of the web app (prepared: `site/`
+  landing page + `.github/workflows/pages.yml` deploy to GitHub Pages on the first push).
 
 * Done when: a tour can be prepared on a computer, sent to the phone and run.
 

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>running-tools</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>running-tools</h1>
+        <p>Small web tools for runners. Free, client-only, no accounts.</p>
+      </header>
+
+      <ul class="apps">
+        <li class="app" style="--app-accent: #2d7a4f; --app-accent-deep: #1f5c3a">
+          <h2><a href="./runtour/">RunTour</a></h2>
+          <p>
+            An audio guide for your run: generate a route, pick up places along the way with
+            texts from Wikipedia, and let GPS trigger the narration as you pass them.
+          </p>
+          <nav>
+            <a class="button" href="./runtour/">Open the app</a>
+            <a
+              class="button secondary"
+              href="https://github.com/LeoWikstrom/running-tools/releases/latest/download/runtour.apk"
+              >Download Android APK</a
+            >
+          </nav>
+        </li>
+
+        <li class="app" style="--app-accent: #c63d80; --app-accent-deep: #a62d68">
+          <h2><a href="./profile-course/">Profile Course</a></h2>
+          <p>
+            Training for a hilly race? Upload the race GPX, pick a start point near home, and
+            get a runnable course whose elevation profile matches the race.
+          </p>
+          <nav>
+            <a class="button" href="./profile-course/">Open the app</a>
+          </nav>
+        </li>
+
+        <!-- New app? Build it under apps/<name> (the Pages workflow deploys every
+             apps/*/dist automatically) and add a card here pointing at ./<name>/. -->
+      </ul>
+
+      <footer>
+        <a href="https://github.com/LeoWikstrom/running-tools">Source on GitHub</a>
+      </footer>
+    </main>
+  </body>
+</html>
