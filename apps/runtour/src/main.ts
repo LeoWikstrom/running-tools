@@ -1068,6 +1068,14 @@ function clearCourse(): void {
   reflectGenButtons();
 }
 
+el<HTMLButtonElement>('gen-info').addEventListener('click', () => {
+  toast(
+    'Drag the markers to move them. Without a finish the course is a loop; with one it runs ' +
+      'point to point, and an empty length means as short as the interesting places allow.',
+    8000,
+  );
+});
+
 setStartBtn.addEventListener('click', () => {
   setting = setting === 'start' ? null : 'start';
   reflectGenButtons();
@@ -1099,7 +1107,11 @@ function placeStart(latlng: L.LatLng): void {
 }
 
 function placeFinish(latlng: L.LatLng): void {
+  const hadEnd = genEnd !== null;
   genEnd = { lat: latlng.lat, lon: latlng.lng };
+  // A finish defaults the length to "shortest"; a typed length means moving
+  // the finish marker should not wipe it again.
+  if (!hadEnd) genLength.value = '';
   if (!genEndMarker) {
     genEndMarker = L.marker(latlng, { draggable: true, icon: genPin('finish') }).addTo(map);
     genEndMarker.on('dragend', () => {
@@ -1117,6 +1129,8 @@ function removeFinish(): void {
   genEnd = null;
   genEndMarker?.remove();
   genEndMarker = null;
+  // A loop cannot be "shortest" — give the length back its default.
+  if (genLength.value.trim() === '') genLength.value = '8';
   setGenStatus('Finish removed — the course is a loop again.');
   reflectGenButtons();
 }
