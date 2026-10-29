@@ -437,7 +437,7 @@ function render(): void {
   const any = list.length > 0;
   markersBtn.hidden = !any && candidates.length === 0;
   textControls.hidden = !any;
-  previewControls.hidden = !any;
+  previewControls.hidden = !any || !showPreviewBox.checked;
   el<HTMLDivElement>('list-lang-row').hidden = !any;
   busUi?.reflectCourse(course !== null);
   // Every state change passes through here; the tour survives the tab being
@@ -627,6 +627,15 @@ findButton.addEventListener('click', () =>
     }
   })(),
 );
+
+const showPreviewBox = el<HTMLInputElement>('show-preview');
+showPreviewBox.checked = localStorage.getItem('runtour.hidePreviewBar') !== '1';
+showPreviewBox.addEventListener('change', () => {
+  localStorage.setItem('runtour.hidePreviewBar', showPreviewBox.checked ? '0' : '1');
+  // Hiding the bar mid-preview would strand a voice with no stop button.
+  if (!showPreviewBox.checked) stopPreview();
+  render();
+});
 
 const historicImagesBox = el<HTMLInputElement>('historic-images');
 // A rider looks at the screen; a runner mostly cannot, so only bus opts in by
