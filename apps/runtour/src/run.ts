@@ -3,7 +3,9 @@ import { validateTour, type TourPlaceImage } from '@running/core/tour/types';
 import type { LocateHandle } from './locate';
 import { fitVisible } from './ui/visibleMap';
 import { getRunState, getTourJson, sendRunAction, type RunState } from './native';
-import { PLACE_COLOR } from './variant';
+import { PLACE_COLOR, RIDE_NOUN } from './variant';
+
+const NOUN_CAP = RIDE_NOUN[0]!.toUpperCase() + RIDE_NOUN.slice(1);
 
 export interface RunModeOptions {
   map: L.Map;
@@ -120,7 +122,7 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
       b.addEventListener('click', onClick);
       return b;
     };
-    elems.pause = btn('run-pause', ICONS.pause, 'Pause the run', () => sendRunAction('pause'));
+    elems.pause = btn('run-pause', ICONS.pause, `Pause the ${RIDE_NOUN}`, () => sendRunAction('pause'));
     elems.buttons.append(
       btn('run-repeat', ICONS.repeat, 'Repeat the last clip', () => sendRunAction('repeat')),
       elems.pause,
@@ -128,7 +130,7 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     );
     elems.finish = document.createElement('button');
     elems.finish.className = 'run-finish-wide';
-    elems.finish.textContent = 'Finish run';
+    elems.finish.textContent = `Finish ${RIDE_NOUN}`;
     elems.finish.addEventListener('click', () => sendRunAction('finish'));
 
     elems.summary = document.createElement('div');
@@ -186,7 +188,7 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
 
   function renderSummary(state: RunState): void {
     summaryShown = true;
-    elems.next.textContent = 'Run finished';
+    elems.next.textContent = `${NOUN_CAP} finished`;
     elems.buttons.hidden = true;
     elems.finish.hidden = true;
     elems.off.hidden = true;
@@ -205,7 +207,7 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     if (!state || !state.started) {
       // startRun was sent but the service has not come up yet — permission
       // dialogs may be on screen. Back offers the way out if they are denied.
-      elems.title.textContent = 'Starting the run…';
+      elems.title.textContent = `Starting the ${RIDE_NOUN}…`;
       elems.next.textContent = 'Grant the permission dialogs if they appear.';
       elems.stats.textContent = '';
       elems.buttons.hidden = true;
@@ -227,7 +229,7 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     elems.back.hidden = true;
     elems.next.textContent = state.nextPlaceName
       ? `Next: ${state.nextPlaceName} — ${Math.max(0, Math.round(state.nextPlaceRemainingM ?? 0))} m`
-      : 'No places left — run to the finish.';
+      : `No places left — ${RIDE_NOUN === 'run' ? 'run' : 'ride'} on to the finish.`;
     elems.stats.textContent =
       `${(state.dNow / 1000).toFixed(2)} / ${(state.tourDistance / 1000).toFixed(1)} km · ` +
       fmtTime(state.elapsedSeconds) + (state.paused ? ' · paused' : '');
@@ -244,7 +246,7 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     // The photo lingers after its clip: a glance can come seconds late.
     elems.image.hidden = shownImageId === null;
     elems.pause.innerHTML = state.paused ? ICONS.play : ICONS.pause;
-    elems.pause.title = state.paused ? 'Resume the run' : 'Pause the run';
+    elems.pause.title = state.paused ? `Resume the ${RIDE_NOUN}` : `Pause the ${RIDE_NOUN}`;
     if (state.lat !== null && state.lon !== null) opts.locate.setPosition(state.lat, state.lon);
   }
 

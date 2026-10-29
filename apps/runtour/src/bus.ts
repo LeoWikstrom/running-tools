@@ -124,6 +124,15 @@ export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions):
     status.hidden = text.length === 0;
   };
 
+  document.getElementById('bus-info')!.addEventListener('click', () => {
+    toast(
+      'Pan the map to where you ride, or search by line number. Picking a line previews it ' +
+        'on the map; choose the stops to ride between and create the tour — the places along ' +
+        'the way and their texts follow by themselves.',
+      8000,
+    );
+  });
+
   function clearPreview(): void {
     previewLayer.clearLayers();
     selected = null;

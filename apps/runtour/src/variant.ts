@@ -2,6 +2,8 @@
 export const VARIANT: 'run' | 'bus' = import.meta.env.MODE === 'bus' ? 'bus' : 'run';
 
 export const APP_NAME = VARIANT === 'bus' ? 'BusTour' : 'RunTour';
+/** What the activity is called in the UI: "Start tour" vs "Start run". */
+export const RIDE_NOUN = VARIANT === 'bus' ? 'tour' : 'run';
 export const THEME_COLOR = VARIANT === 'bus' ? '#1d5fa8' : '#2d7a4f';
 /** Course line and pipeline place markers follow the variant accent. */
 export const PLACE_COLOR = THEME_COLOR;

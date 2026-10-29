@@ -93,8 +93,7 @@ const targetSlider = el<HTMLInputElement>('target-seconds');
 const targetOutput = el<HTMLOutputElement>('target-output');
 const exportTourBtn = el<HTMLButtonElement>('export-tour');
 const exportGpxBtn = el<HTMLButtonElement>('export-gpx');
-const toggleRow = el<HTMLLabelElement>('toggle-row');
-const toggleMarkers = el<HTMLInputElement>('toggle-markers');
+const markersBtn = el<HTMLButtonElement>('markers-btn');
 const nameSearch = el<HTMLInputElement>('name-search');
 const searchBtn = el<HTMLButtonElement>('search-btn');
 const searchResults = el<HTMLUListElement>('search-results');
@@ -441,7 +440,7 @@ function render(): void {
     placeList.appendChild(li);
   }
   const any = list.length > 0;
-  toggleRow.hidden = !any && candidates.length === 0;
+  markersBtn.hidden = !any && candidates.length === 0;
   textControls.hidden = !any;
   previewControls.hidden = !any;
   el<HTMLDivElement>('list-lang-row').hidden = !any;
@@ -523,9 +522,13 @@ nativeOnlyBox.addEventListener('change', () => {
   if (candidates.length > 0) recompute();
 });
 
-toggleMarkers.addEventListener('change', () => {
-  if (toggleMarkers.checked) markerLayer.addTo(map);
+let markersShown = true;
+markersBtn.addEventListener('click', () => {
+  markersShown = !markersShown;
+  if (markersShown) markerLayer.addTo(map);
   else markerLayer.remove();
+  markersBtn.setAttribute('aria-pressed', String(markersShown));
+  markersBtn.classList.toggle('active', markersShown);
 });
 
 targetSlider.addEventListener('input', () => {

@@ -112,6 +112,23 @@ describe('buildPlaces line of sight', () => {
     expect(places).toHaveLength(1);
   });
 
+  it('drops a place visible only through one narrow street gap', () => {
+    // The wall, with a ~24 m slot straight across from the place: exactly one
+    // sample sees it down the canyon — not enough to be worth telling.
+    const westWall: BuildingPoly = {
+      id: 902,
+      lats: [57.70015, 57.70025, 57.70025, 57.70015],
+      lons: [11.9755, 11.9755, 11.9798, 11.9798],
+    };
+    const eastWall: BuildingPoly = {
+      id: 903,
+      lats: [57.70015, 57.70025, 57.70025, 57.70015],
+      lons: [11.9802, 11.9802, 11.9845, 11.9845],
+    };
+    const places = buildPlaces(lats, lons, [candidate({})], {}, undefined, [westWall, eastWall]);
+    expect(places).toHaveLength(0);
+  });
+
   it('keeps a place that is its own building', () => {
     const church = candidate({
       lat: 57.7002,

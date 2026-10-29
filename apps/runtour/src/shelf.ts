@@ -13,6 +13,7 @@ import {
   stopPlayback,
   synthesize,
 } from './native';
+import { RIDE_NOUN } from './variant';
 
 export interface ShelfHandle {
   refresh(): void;
@@ -123,7 +124,7 @@ export function initShelf(
       const row = document.createElement('div');
       row.className = 'row wrap';
       const run = document.createElement('button');
-      run.textContent = 'Start run';
+      run.textContent = `Start ${RIDE_NOUN}`;
       run.className = 'start-run';
       run.addEventListener('click', () => {
         startRun(info.id);

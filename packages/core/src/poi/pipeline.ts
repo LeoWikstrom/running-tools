@@ -85,6 +85,9 @@ export function firstPassProjection(
 const SIGHT_WINDOW_M = 150;
 /** Spacing of the sample points inside that window. */
 const SIGHT_STEP_M = 30;
+/** A place must be in sight from at least this many samples (~60 m of course):
+    one glimpse down a perpendicular street canyon does not make it tellable. */
+const SIGHT_MIN_CLEAR = 3;
 
 const OSM_WAY_URL = /openstreetmap\.org\/way\/(\d+)/;
 
@@ -226,9 +229,10 @@ export function buildPlaces(
   const s: PoiSettings = { ...DEFAULT_POI_SETTINGS, ...settings };
   const merged = dedupeCandidates(candidates).filter((c) => hasSignal(c) && !isExcludedType(c));
 
-  // Line of sight: a place stays if it can be seen from *somewhere* in the
-  // window around its first pass — a corner building must not drop a place
-  // that is in plain view a few seconds earlier or later.
+  // Line of sight: a place stays if enough of the window around its first
+  // pass can see it — a corner building must not drop a place in plain view
+  // a few seconds earlier or later, but a single glimpse through one side
+  // street must not keep it either.
   const losIndex = buildings && buildings.length > 0 ? buildBuildingIndex(buildings) : null;
   const course = losIndex ? coursePoints(lats, lons) : null;
   const visible = (c: PlaceCandidate, along: number): boolean => {
@@ -237,9 +241,15 @@ export function buildPlaces(
     const total = course.cum[course.cum.length - 1]!;
     const from = Math.max(0, along - SIGHT_WINDOW_M);
     const to = Math.min(total, along + SIGHT_WINDOW_M);
+    const samples = Math.floor((to - from) / SIGHT_STEP_M) + 1;
+    const needed = Math.min(SIGHT_MIN_CLEAR, samples);
+    let clear = 0;
     for (let d = from; d <= to; d += SIGHT_STEP_M) {
       const p = course.at(d);
-      if (!losIndex.blocked(p.lat, p.lon, c.lat, c.lon, ownId)) return true;
+      if (!losIndex.blocked(p.lat, p.lon, c.lat, c.lon, ownId)) {
+        clear++;
+        if (clear >= needed) return true;
+      }
     }
     return false;
   };

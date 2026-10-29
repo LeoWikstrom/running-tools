@@ -395,8 +395,59 @@ button {
   margin-bottom: 0;
 }
 
+/* The preview lives in a bar over the top of the map, clear of the sheet. */
 #preview-controls {
-  margin: 8px 0;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  right: 52px;
+  z-index: 900;
+}
+
+#preview-controls .row {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--panel-bg);
+  color: CanvasText;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.3);
+}
+
+#preview-controls .pace-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#preview-controls .pace-control > span {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+#preview-controls .pace-control input {
+  width: 56px;
+  min-height: 30px;
+}
+
+#preview-controls .check,
+#preview-controls button {
+  min-height: 30px;
+}
+
+#preview-controls button {
+  padding: 2px 10px;
+}
+
+#preview-controls .hint {
+  width: fit-content;
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--panel-bg);
 }
 
 #preview-btn {
@@ -523,7 +574,8 @@ details.section[open]::details-content {
 
 #image-card {
   position: fixed;
-  top: 12px;
+  /* Below the preview bar — the card shows exactly while previews play. */
+  top: 64px;
   left: 12px;
   z-index: 950;
   width: min(60vw, 320px);
