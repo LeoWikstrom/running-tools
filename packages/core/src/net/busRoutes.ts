@@ -1,4 +1,4 @@
-import { haversineMeters, type LatLon } from '../geo';
+import { haversineMeters, projectOnPolyline, type LatLon } from '../geo';
 
 /** A gap between consecutive member ways larger than this is reported. */
 const GAP_M = 30;
@@ -12,6 +12,22 @@ export interface BusLine {
   name: string;
   from?: string;
   to?: string;
+  kind: 'bus' | 'tram';
+}
+
+export interface BusStop {
+  id: number;
+  name: string;
+  lat: number;
+  lon: number;
+}
+
+/** One line with everything the picker needs: geometry and ordered stops. */
+export interface BusLineData extends BusLine {
+  points: LatLon[];
+  /** Joints further apart than 30 m while chaining the ways. */
+  gaps: number;
+  stops: BusStop[];
 }
 
 export interface OverpassRelationMember {
@@ -34,26 +50,98 @@ export interface OverpassGeomWay {
   geometry?: { lat: number; lon: number }[];
 }
 
-// Nearby ways first, then relations through membership (rel(bw)) — the direct
-// relation[...](around:...) form makes Overpass geometry-check every bus route
-// and routinely times out at the dispatcher.
-export function buildBusRoutesListQuery(center: LatLon, radiusMeters: number): string {
-  const around = `(around:${Math.round(radiusMeters)},${center.lat.toFixed(6)},${center.lon.toFixed(6)})`;
-  return `[out:json][timeout:30];way[highway]${around};rel(bw)[type=route][route=bus];out tags;`;
+export interface OverpassGeomNode {
+  type: 'node';
+  id: number;
+  lat: number;
+  lon: number;
+  tags?: Record<string, string>;
 }
 
-export function buildBusRouteGeomQuery(relationId: number): string {
-  return `[out:json][timeout:60];relation(${relationId});out body;way(r);out geom;`;
+export type BusAreaElement = OverpassRelation | OverpassGeomWay | OverpassGeomNode;
+
+export interface BBox {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
 }
 
-export function relationsToBusLines(relations: OverpassRelation[]): BusLine[] {
-  const out: BusLine[] = [];
+/**
+ * Every bus and tram line crossing the box, with full geometry and stops, in
+ * one query. Seeded from nearby ways then rel(bw) — the direct
+ * relation[...](bbox) form makes Overpass geometry-check every route on the
+ * planet and routinely times out at the dispatcher. Tram tracks are railway,
+ * not highway, hence the union seed.
+ */
+export function buildBusAreaQuery(bbox: BBox): string {
+  const b = `(${bbox.south.toFixed(5)},${bbox.west.toFixed(5)},${bbox.north.toFixed(5)},${bbox.east.toFixed(5)})`;
+  return (
+    `[out:json][timeout:90];(` +
+    `way[highway]${b};` +
+    `way[railway~"^(tram|light_rail)$"]${b};` +
+    `);rel(bw)[type=route][route~"^(bus|tram)$"]->.rt;` +
+    `.rt out body;way(r.rt);out geom;node(r.rt);out body;`
+  );
+}
+
+function relationToBusLine(r: OverpassRelation): BusLine | null {
+  const tags = r.tags;
+  if (!tags) return null;
+  const name = tags.name ?? [tags.ref, tags.to].filter(Boolean).join(' → ');
+  if (!name) return null;
+  return {
+    id: r.id,
+    ref: tags.ref ?? '',
+    name,
+    from: tags.from,
+    to: tags.to,
+    kind: tags.route === 'tram' ? 'tram' : 'bus',
+  };
+}
+
+/** The relation's stop nodes in travel order; platforms fill in when a line
+    has no stop roles at all. */
+function relationStops(
+  relation: OverpassRelation,
+  nodes: ReadonlyMap<number, OverpassGeomNode>,
+): BusStop[] {
+  const pick = (test: (role: string) => boolean): BusStop[] => {
+    const out: BusStop[] = [];
+    for (const m of relation.members ?? []) {
+      if (m.type !== 'node' || !test(m.role)) continue;
+      const node = nodes.get(m.ref);
+      if (!node) continue;
+      out.push({
+        id: node.id,
+        name: node.tags?.name ?? `Stop ${out.length + 1}`,
+        lat: node.lat,
+        lon: node.lon,
+      });
+    }
+    return out;
+  };
+  const stops = pick((role) => role.startsWith('stop'));
+  return stops.length > 0 ? stops : pick((role) => role.startsWith('platform'));
+}
+
+/** Turn one bus-area response into ready-to-preview lines, sorted by ref. */
+export function parseBusLines(elements: BusAreaElement[]): BusLineData[] {
+  const ways = new Map<number, OverpassGeomWay>();
+  const nodes = new Map<number, OverpassGeomNode>();
+  const relations: OverpassRelation[] = [];
+  for (const el of elements) {
+    if (el.type === 'way') ways.set(el.id, el);
+    else if (el.type === 'node') nodes.set(el.id, el);
+    else if (el.type === 'relation') relations.push(el);
+  }
+  const out: BusLineData[] = [];
   for (const r of relations) {
-    const tags = r.tags;
-    if (!tags) continue;
-    const name = tags.name ?? [tags.ref, tags.to].filter(Boolean).join(' → ');
-    if (!name) continue;
-    out.push({ id: r.id, ref: tags.ref ?? '', name, from: tags.from, to: tags.to });
+    const line = relationToBusLine(r);
+    if (!line) continue;
+    const { points, gaps } = assembleRoutePolyline(r, ways);
+    if (points.length < 2) continue;
+    out.push({ ...line, points, gaps, stops: relationStops(r, nodes) });
   }
   out.sort((a, b) => {
     const na = Number(a.ref);
@@ -61,6 +149,24 @@ export function relationsToBusLines(relations: OverpassRelation[]): BusLine[] {
     if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
     return a.ref.localeCompare(b.ref) || a.name.localeCompare(b.name);
   });
+  return out;
+}
+
+/**
+ * The stretch of the line between two stops, endpoints interpolated onto the
+ * geometry. Stops project onto their nearest point of the line; the result
+ * always runs in the line's travel direction — the bus only goes one way.
+ */
+export function cropBetweenStops(points: LatLon[], a: BusStop, b: BusStop): LatLon[] {
+  const lats = points.map((p) => p.lat);
+  const lons = points.map((p) => p.lon);
+  const pa = projectOnPolyline(lats, lons, a.lat, a.lon);
+  const pb = projectOnPolyline(lats, lons, b.lat, b.lon);
+  if (!pa || !pb) return points;
+  const [from, to] = pa.along <= pb.along ? [pa, pb] : [pb, pa];
+  const out: LatLon[] = [{ lat: from.lat, lon: from.lon }];
+  for (let i = from.segment + 1; i <= to.segment; i++) out.push(points[i]!);
+  out.push({ lat: to.lat, lon: to.lon });
   return out;
 }
 

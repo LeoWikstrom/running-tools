@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { haversineMeters } from '../src/geo';
 import {
   assembleRoutePolyline,
-  relationsToBusLines,
+  cropBetweenStops,
+  parseBusLines,
+  type BusAreaElement,
+  type BusStop,
   type OverpassGeomWay,
   type OverpassRelation,
 } from '../src/net/busRoutes';
@@ -106,15 +109,72 @@ describe('assembleRoutePolyline', () => {
   });
 });
 
-describe('relationsToBusLines', () => {
-  it('reads tags and sorts numerically by ref', () => {
-    const lines = relationsToBusLines([
-      { type: 'relation', id: 3, tags: { ref: '16', name: 'Bus 16', to: 'Eketrägatan' } },
-      { type: 'relation', id: 1, tags: { ref: '2', name: 'Bus 2' } },
-      { type: 'relation', id: 2, tags: { ref: '10', name: 'Bus 10' } },
-      { type: 'relation', id: 4 },
-    ]);
-    expect(lines.map((l) => l.ref)).toEqual(['2', '10', '16']);
-    expect(lines[2]!.to).toBe('Eketrägatan');
+describe('parseBusLines', () => {
+  const node = (id: number, lat: number, lon: number, name?: string): BusAreaElement => ({
+    type: 'node',
+    id,
+    lat,
+    lon,
+    tags: name ? { name } : undefined,
+  });
+
+  const elements: BusAreaElement[] = [
+    way(10, [[0, 0], [0, 0.001]]),
+    way(11, [[0, 0.001], [0, 0.002]]),
+    node(100, 0, 0, 'Första'),
+    node(101, 0, 0.002, 'Sista'),
+    {
+      type: 'relation',
+      id: 3,
+      tags: { type: 'route', route: 'bus', ref: '16', name: 'Bus 16', to: 'Eketrägatan' },
+      members: [
+        { type: 'node', ref: 100, role: 'stop' },
+        { type: 'way', ref: 10, role: '' },
+        { type: 'way', ref: 11, role: '' },
+        { type: 'node', ref: 101, role: 'stop' },
+      ],
+    },
+    {
+      type: 'relation',
+      id: 1,
+      tags: { type: 'route', route: 'tram', ref: '2', name: 'Tram 2' },
+      members: [{ type: 'way', ref: 10, role: '' }],
+    },
+    // Untagged and geometry-less relations fall out.
+    { type: 'relation', id: 4 },
+    { type: 'relation', id: 5, tags: { route: 'bus', name: 'Ghost' }, members: [] },
+  ];
+
+  it('builds lines with geometry, kind and ordered stops, sorted by ref', () => {
+    const lines = parseBusLines(elements);
+    expect(lines.map((l) => l.ref)).toEqual(['2', '16']);
+    expect(lines[0]!.kind).toBe('tram');
+    const sixteen = lines[1]!;
+    expect(sixteen.kind).toBe('bus');
+    expect(sixteen.points).toHaveLength(3);
+    expect(sixteen.stops.map((s) => s.name)).toEqual(['Första', 'Sista']);
+  });
+});
+
+describe('cropBetweenStops', () => {
+  const points = [
+    { lat: 0, lon: 0 },
+    { lat: 0, lon: 0.001 },
+    { lat: 0, lon: 0.002 },
+    { lat: 0, lon: 0.003 },
+  ];
+  const stop = (id: number, lon: number): BusStop => ({ id, name: `S${id}`, lat: 0.0001, lon });
+
+  it('keeps the stretch between the stops, endpoints interpolated', () => {
+    const out = cropBetweenStops(points, stop(1, 0.0005), stop(2, 0.0025));
+    expect(out[0]!.lon).toBeCloseTo(0.0005, 6);
+    expect(out[out.length - 1]!.lon).toBeCloseTo(0.0025, 6);
+    expect(out.map((p) => p.lon)).toEqual([0.0005, 0.001, 0.002, 0.0025]);
+  });
+
+  it('always runs in travel direction, even picked backwards', () => {
+    const out = cropBetweenStops(points, stop(2, 0.0025), stop(1, 0.0005));
+    expect(out[0]!.lon).toBeCloseTo(0.0005, 6);
+    expect(out[out.length - 1]!.lon).toBeCloseTo(0.0025, 6);
   });
 });

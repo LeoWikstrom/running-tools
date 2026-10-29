@@ -60,15 +60,33 @@
         </div>
         <div id="bus-section" class="bus-only">
           <p class="hint" id="bus-hint">
-            Pan the map to where you ride, list the bus lines there and pick one — the places
-            along the route and their texts follow by themselves.
+            Pan the map to where you ride and list the bus and tram lines there. Picking one
+            previews it on the map; choose the stops to ride between and create the tour —
+            the places along the way and their texts follow by themselves.
           </p>
           <div class="row">
-            <button id="bus-find">Find bus lines here</button>
+            <button id="bus-find">Find lines here</button>
             <button id="bus-clear" hidden>Clear route</button>
           </div>
           <p class="hint" id="bus-status" hidden></p>
           <ul id="bus-list" hidden></ul>
+          <div id="bus-pick" hidden>
+            <p id="bus-pick-name"></p>
+            <div class="row">
+              <label class="control grow-control">
+                <span>From stop</span>
+                <select id="bus-from"></select>
+              </label>
+              <label class="control grow-control">
+                <span>To stop</span>
+                <select id="bus-to"></select>
+              </label>
+            </div>
+            <div class="row">
+              <button id="bus-use">Create the tour</button>
+              <button id="bus-back">Back to lines</button>
+            </div>
+          </div>
         </div>
         <p class="hint" id="gen-status" hidden></p>
         <p class="hint" id="status" hidden></p>

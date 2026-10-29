@@ -1294,6 +1294,7 @@ void renderAreas();
 if (VARIANT === 'bus') {
   initBusLines({
     map,
+    sheet,
     onRoute: (name, points) => {
       setCourse(name, points);
       render();
