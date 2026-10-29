@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { haversineMeters } from '../src/geo';
 import {
   assembleRoutePolyline,
+  buildBusSearchQuery,
   cropBetweenStops,
   parseBusLines,
   type BusAreaElement,
@@ -153,6 +154,21 @@ describe('parseBusLines', () => {
     expect(sixteen.kind).toBe('bus');
     expect(sixteen.points).toHaveLength(3);
     expect(sixteen.stops.map((s) => s.name)).toEqual(['Första', 'Sista']);
+  });
+});
+
+describe('buildBusSearchQuery', () => {
+  const bbox = { south: 57.6, west: 11.9, north: 57.8, east: 12.1 };
+
+  it('narrows the route filter when a kind is given', () => {
+    expect(buildBusSearchQuery(bbox, '3', 'tram')).toContain('route~"^tram$"');
+    expect(buildBusSearchQuery(bbox, '3')).toContain('route~"^(bus|tram)$"');
+  });
+
+  it('escapes quotes and regex specials in the term', () => {
+    const q = buildBusSearchQuery(bbox, 'St. "X" (east)');
+    expect(q).toContain('"ref"="St. \\"X\\" (east)"');
+    expect(q).toContain('St\\. \\"X\\" \\(east\\)');
   });
 });
 

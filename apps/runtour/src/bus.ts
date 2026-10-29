@@ -53,9 +53,24 @@ const covers = (outer: BBox, inner: BBox): boolean =>
   outer.north >= inner.north &&
   outer.east >= inner.east;
 
-function matchesText(line: BusLineData, text: string): boolean {
+/** "Tram 3", "spårvagn 3", "bus 16" → kind + line number; else a free term.
+    OSM refs/names rarely contain the word "tram", but the app's labels do —
+    this is what someone types after reading the list. */
+function parseLineQuery(text: string): { kind?: 'bus' | 'tram'; term: string } {
   const t = text.trim().toLowerCase();
-  return line.ref.toLowerCase() === t || line.name.toLowerCase().includes(t);
+  const m = /^(tram|spårvagn|bus|buss)\s+(.+)$/.exec(t);
+  if (!m) return { term: t };
+  return { kind: m[1] === 'tram' || m[1] === 'spårvagn' ? 'tram' : 'bus', term: m[2]! };
+}
+
+function matchesText(line: BusLineData, text: string): boolean {
+  const { kind, term } = parseLineQuery(text);
+  if (kind && line.kind !== kind) return false;
+  return (
+    line.ref.toLowerCase() === term ||
+    line.name.toLowerCase().includes(term) ||
+    lineLabel(line).toLowerCase().includes(text.trim().toLowerCase())
+  );
 }
 
 export interface BusLinesOptions {
@@ -146,9 +161,10 @@ export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions):
       north: v.north + padLat,
       east: v.east + padLon,
     };
+    const { kind, term } = parseLineQuery(text);
     setBusStatus(`Searching for “${text}”… the public Overpass servers can take a minute.`);
-    const key = `bussearch:v1:${text.toLowerCase()}:${bbox.south.toFixed(2)},${bbox.west.toFixed(2)}`;
-    const response = await fetchOverpass(buildBusSearchQuery(bbox, text), key, PATIENT);
+    const key = `bussearch:v2:${kind ?? 'any'}:${term}:${bbox.south.toFixed(2)},${bbox.west.toFixed(2)}`;
+    const response = await fetchOverpass(buildBusSearchQuery(bbox, term, kind), key, PATIENT);
     const found = parseBusLines(response.elements as unknown as BusAreaElement[]);
     // Found lines join the pool so previews and later filters stay instant.
     const known = new Set(lines.map((l) => l.id));

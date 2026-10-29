@@ -90,14 +90,15 @@ export function buildBusAreaQuery(bbox: BBox): string {
  * area query, the direct relation(bbox) form is fine here: the ref/name tag
  * filters cut the candidate set to a handful before any geometry is checked.
  */
-export function buildBusSearchQuery(bbox: BBox, text: string): string {
+export function buildBusSearchQuery(bbox: BBox, text: string, kind?: 'bus' | 'tram'): string {
   const b = `(${bbox.south.toFixed(5)},${bbox.west.toFixed(5)},${bbox.north.toFixed(5)},${bbox.east.toFixed(5)})`;
+  const route = kind ? `^${kind}$` : '^(bus|tram)$';
   const quoted = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   const regex = quoted.replace(/[.*+?^${}()|[\]]/g, '\\$&');
   return (
     `[out:json][timeout:60];(` +
-    `relation[type=route][route~"^(bus|tram)$"]["ref"="${quoted}"]${b};` +
-    `relation[type=route][route~"^(bus|tram)$"]["name"~"${regex}",i]${b};` +
+    `relation[type=route][route~"${route}"]["ref"="${quoted}"]${b};` +
+    `relation[type=route][route~"${route}"]["name"~"${regex}",i]${b};` +
     `)->.rt;.rt out body;way(r.rt);out geom;node(r.rt);out body;`
   );
 }

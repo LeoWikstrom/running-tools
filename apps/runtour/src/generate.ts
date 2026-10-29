@@ -66,6 +66,9 @@ function sliderWeights(p: GenerateParams): Partial<TourWeights> {
     // More places: interest counts double; more direct: length matters more.
     interest: 0.5 + p.placesSlider / 100,
     lengthDiff: 0.02 + ((100 - p.placesSlider) / 100) * 0.08,
+    // Nearly double the core default: a 150 m out-and-back costs ~22 points,
+    // so only a spur that actually collects a decent place pays for itself.
+    repeat: 0.15,
     // Pedestrian only: safety penalties bite hard.
     penalty: 0.02 + ((100 - p.pedestrianSlider) / 100) * 0.12,
     // Historic centre: ground far from the places' centroid costs.
