@@ -34,12 +34,7 @@ import {
   regenerateCourse,
   type GenerationContext,
 } from './generate';
-import {
-  startGpsPreview,
-  startSimulatedPreview,
-  type PreviewHandle,
-  type PreviewPlace,
-} from './preview';
+import { startSimulatedPreview, type PreviewHandle, type PreviewPlace } from './preview';
 import { listTours, native, saveTourToPhone, getTourJson } from './native';
 import { loadSession, saveSession } from './session';
 import { translatorAvailable } from './translate';
@@ -879,7 +874,6 @@ const previewFast = el<HTMLInputElement>('preview-fast');
 previewFast.addEventListener('change', () => {
   preview?.setSpeed?.(previewFast.checked ? 10 : 1);
 });
-const previewGps = el<HTMLInputElement>('preview-gps');
 const previewBtn = el<HTMLButtonElement>('preview-btn');
 const previewPause = el<HTMLButtonElement>('preview-pause');
 let previewPaused = false;
@@ -889,9 +883,6 @@ previewPause.addEventListener('click', () => {
   preview.setPaused(previewPaused);
   previewPause.textContent = previewPaused ? 'Resume' : 'Pause';
 });
-const previewNote = el<HTMLParagraphElement>('preview-note');
-const PREVIEW_LABEL = VARIANT === 'bus' ? 'Preview ride' : 'Preview run';
-previewBtn.textContent = PREVIEW_LABEL;
 
 let preview: PreviewHandle | null = null;
 let runnerMarker: L.CircleMarker | null = null;
@@ -945,8 +936,7 @@ function stopPreview(): void {
   hideImageCard();
   runnerMarker?.remove();
   runnerMarker = null;
-  previewBtn.textContent = PREVIEW_LABEL;
-  previewNote.hidden = true;
+  previewBtn.textContent = 'Preview';
   previewPause.hidden = true;
   previewPaused = false;
   previewPause.textContent = 'Pause';
@@ -987,19 +977,16 @@ previewBtn.addEventListener('click', () => {
       setStatus('Preview finished.');
     },
   };
-  preview = previewGps.checked
-    ? startGpsPreview(course.lats, course.lons, previewPlaces(), narrationLang(), callbacks)
-    : startSimulatedPreview(
-        course.lats,
-        course.lons,
-        previewPlaces(),
-        narrationLang(),
-        parsePace(paceInput.value),
-        previewFast.checked ? 10 : 1,
-        callbacks,
-      );
-  previewBtn.textContent = 'Stop preview';
-  previewNote.hidden = !previewGps.checked;
+  preview = startSimulatedPreview(
+    course.lats,
+    course.lons,
+    previewPlaces(),
+    narrationLang(),
+    parsePace(paceInput.value),
+    previewFast.checked ? 10 : 1,
+    callbacks,
+  );
+  previewBtn.textContent = 'Stop';
   previewPause.hidden = false;
 });
 

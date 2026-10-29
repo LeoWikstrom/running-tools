@@ -405,7 +405,8 @@ button {
 }
 
 #preview-controls .row {
-  flex-wrap: wrap;
+  /* One slim row, always — the controls are few and short on purpose. */
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   width: fit-content;
