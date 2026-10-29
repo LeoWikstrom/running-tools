@@ -83,7 +83,10 @@ mkdir -p build/gen build/classes build/dex
 # 4. resources, re-branded per variant
 cp -r res build/res-src
 sed -i "s/>RunTour</>$APP_LABEL</" build/res-src/values/strings.xml
-[ "$VARIANT" = bus ] && cp variants/ic_launcher_bus.xml build/res-src/drawable/ic_launcher.xml
+if [ "$VARIANT" = bus ]; then
+  cp variants/ic_launcher_fg_bus.png build/res-src/drawable-nodpi/ic_launcher_fg.png
+  sed -i "s/#2D7A4F/#1D5FA8/" build/res-src/values/colors.xml
+fi
 aapt2 compile --dir build/res-src -o build/res.zip
 aapt2 link -o build/base.apk -I "$ANDROID_JAR" \
   --manifest AndroidManifest.xml -A assets --java build/gen \
