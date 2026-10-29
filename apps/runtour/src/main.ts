@@ -22,7 +22,7 @@ import {
   saveAreaBuildings,
   saveAreaPlaces,
 } from '@running/core/net/areaStore';
-import type { BuildingPoly } from '@running/core/geo/los';
+import { buildBuildingIndex, type BuildingIndex, type BuildingPoly } from '@running/core/geo/los';
 import { fetchAreaBuildings } from '@running/core/poi/buildings';
 import { fetchNetwork } from '@running/core/net/overpass';
 import { fetchCandidates, searchPlacesByName } from './places';
@@ -143,16 +143,61 @@ function targetSeconds(): number {
 /** By the place you want ~this much of its clip already told — you see a
     place coming up, not shrinking behind you. */
 const CLIP_HEAD_FRACTION = 0.5;
+/** Sightline checks for the trigger walk the course at this step, metres. */
+const TRIGGER_SIGHT_STEP_M = 20;
 
-/** The pipeline's trigger knows only the lead distance; once the text exists
-    the clip's own length pulls the start earlier, so a 40 s story does not
-    mostly play after the place has passed. */
+let losIndex: BuildingIndex | null = null;
+let courseCum: Float64Array | null = null;
+
+function courseDistances(): Float64Array {
+  if (courseCum) return courseCum;
+  const c = course!;
+  courseCum = new Float64Array(c.lats.length);
+  for (let i = 1; i < c.lats.length; i++) {
+    courseCum[i] =
+      courseCum[i - 1]! + haversineMeters(c.lats[i - 1]!, c.lons[i - 1]!, c.lats[i]!, c.lons[i]!);
+  }
+  return courseCum;
+}
+
+function coursePointAt(d: number): { lat: number; lon: number } {
+  const cum = courseDistances();
+  const c = course!;
+  let lo = 0;
+  let hi = cum.length - 1;
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1;
+    if (cum[mid]! <= d) lo = mid;
+    else hi = mid;
+  }
+  const segLen = cum[hi]! - cum[lo]!;
+  const f = segLen === 0 ? 0 : (d - cum[lo]!) / segLen;
+  return {
+    lat: c.lats[lo]! + f * (c.lats[hi]! - c.lats[lo]!),
+    lon: c.lons[lo]! + f * (c.lons[hi]! - c.lons[lo]!),
+  };
+}
+
+/**
+ * The pipeline's trigger knows only the lead distance; once the text exists
+ * the clip's own length pulls the start earlier, so a 40 s story does not
+ * mostly play after the place has passed. But never earlier than the first
+ * point the place can actually be seen from — a story should not start
+ * behind the corner that still hides its subject.
+ */
 function effectiveTriggerD(p: Place): number {
   const text = texts.get(p.id)?.text ?? '';
   const clipSeconds = countWords(text) / WORDS_PER_SECOND;
   const metresPerSecond = 1000 / VARIANT_DEFAULTS.paceSecPerKm;
   const head = clipSeconds * metresPerSecond * CLIP_HEAD_FRACTION;
-  return Math.max(0, p.d - VARIANT_DEFAULTS.leadDistance - head);
+  const desired = Math.max(0, p.d - VARIANT_DEFAULTS.leadDistance - head);
+  if (!losIndex || !course) return desired;
+  const total = courseDistances()[courseDistances().length - 1]!;
+  for (let d = desired; d <= Math.min(p.d + 150, total); d += TRIGGER_SIGHT_STEP_M) {
+    const at = coursePointAt(d);
+    if (!losIndex.blocked(at.lat, at.lon, p.lat, p.lon)) return d;
+  }
+  return desired;
 }
 
 function setCourse(name: string, points: GpxPoint[]): void {
@@ -165,8 +210,10 @@ function setCourse(name: string, points: GpxPoint[]): void {
   stopPreview();
   course = { name, points, lats, lons, distance };
   tourId = null;
+  courseCum = null;
   candidates = [];
   buildings = [];
+  losIndex = null;
   manual = [];
   places = [];
   removedIds.clear();
@@ -199,6 +246,7 @@ function updateCourseGeometry(pts: [number, number][]): void {
     distance += haversineMeters(lats[i - 1]!, lons[i - 1]!, lats[i]!, lons[i]!);
   }
   course = { ...course, points, lats, lons, distance };
+  courseCum = null;
   courseLine?.remove();
   courseLine = L.polyline(
     lats.map((lat, i) => [lat, lons[i]!] as [number, number]),
@@ -619,6 +667,7 @@ async function runFindPlaces(): Promise<boolean> {
     );
     candidates = report.candidates;
     buildings = report.buildings;
+    losIndex = buildings.length > 0 ? buildBuildingIndex(buildings) : null;
     recompute();
     if (report.failures.length > 0) {
       setStatus(
@@ -1065,8 +1114,10 @@ function clearCourse(): void {
   course = null;
   genContext = null;
   tourId = null;
+  courseCum = null;
   candidates = [];
   buildings = [];
+  losIndex = null;
   manual = [];
   places = [];
   removedIds.clear();
@@ -1487,12 +1538,12 @@ void (async () => {
   try {
     applyTour(validateTour(saved));
     setStatus(`Tour “${saved.name}” restored from the last session.`);
-    // setCourse fitted the map, but at startup the sheet is still settling
-    // into its first stop — its box can momentarily cover the whole screen,
-    // squeezing the fit into a sliver. Fit again once layout is done.
+    // setCourse fitted the map against the still-settling sheet. Fit again
+    // once layout is done — to the whole screen, not the above-sheet strip:
+    // as zoomed in as keeping the entire course in view allows.
     window.setTimeout(() => {
-      if (courseLine) fitVisible(map, sheet, courseLine.getBounds());
-    }, 250);
+      if (courseLine) map.fitBounds(courseLine.getBounds(), { padding: L.point(32, 32) });
+    }, 400);
   } catch {
     // A stale or half-written session is silently dropped.
   }
