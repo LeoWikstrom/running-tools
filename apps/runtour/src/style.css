@@ -576,9 +576,10 @@ details.section[open]::details-content {
 
 #image-card {
   position: fixed;
-  /* Below the preview bar — the card shows exactly while previews play. */
-  top: 64px;
-  left: 12px;
+  /* Below the right-aligned preview bar (the card shows while previews
+     play), keeping Leaflet's zoom controls clear on the left. */
+  top: 60px;
+  right: 52px;
   z-index: 950;
   width: min(60vw, 320px);
   padding: 6px;
