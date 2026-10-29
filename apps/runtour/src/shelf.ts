@@ -2,7 +2,9 @@ import { validateTour, type Tour } from '@running/core/tour/types';
 import {
   audioFilename,
   deleteTour,
+  downloadTourFile,
   getTourJson,
+  imageFilename,
   listTours,
   native,
   playFile,
@@ -52,8 +54,26 @@ export function initShelf(
         progress.value = done;
         setStatus(`Synthesising ${done}/${withText.length}…`);
       }
+      // Pictures ride along: each becomes a file in the tour's directory, so
+      // the run screen can show them with no network. Failures keep the URL.
+      const withImage = tour.places.filter((p) => p.image && !p.image.file);
+      let fetched = 0;
+      for (const p of withImage) {
+        const filename = imageFilename(p.id, p.image!.url);
+        try {
+          await downloadTourFile(tour.id, filename, p.image!.url);
+          p.image!.file = filename;
+          fetched++;
+        } catch {
+          // Offline right now, or an old APK without the bridge method.
+        }
+        setStatus(`Fetching pictures ${fetched}/${withImage.length}…`);
+      }
       saveTourToPhone(JSON.stringify(tour));
-      setStatus(`Audio ready for ${done} places.`);
+      setStatus(
+        `Audio ready for ${done} places` +
+          (withImage.length > 0 ? `, ${fetched} pictures stored.` : '.'),
+      );
     })();
   }
 

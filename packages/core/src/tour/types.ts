@@ -28,6 +28,8 @@ export interface TourPlaceImage {
   /** "Artist · licence · Wikimedia Commons" — Commons licences require it. */
   attribution: string;
   year?: number;
+  /** Filename inside the tour's directory once prefetched for offline use. */
+  file?: string;
 }
 
 export interface TourPlace {
@@ -129,6 +131,9 @@ export function validateTour(json: unknown): Tour {
       const img = p.image as Record<string, unknown>;
       for (const field of ['url', 'pageUrl', 'attribution']) {
         if (typeof img[field] !== 'string') fail(`place ${String(p.name)}: image.${field} bad`);
+      }
+      if (img.file !== undefined && typeof img.file !== 'string') {
+        fail(`place ${String(p.name)}: image.file bad`);
       }
     }
   }

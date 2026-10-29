@@ -93,6 +93,9 @@ public class MainActivity extends Activity {
         if (path.endsWith(".json")) return "application/json";
         if (path.endsWith(".svg")) return "image/svg+xml";
         if (path.endsWith(".png")) return "image/png";
+        if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+        if (path.endsWith(".gif")) return "image/gif";
+        if (path.endsWith(".webp")) return "image/webp";
         if (path.endsWith(".woff2")) return "font/woff2";
         return "application/octet-stream";
     }
@@ -128,6 +131,21 @@ public class MainActivity extends Activity {
                 if (!HOST.equals(url.getHost())) return null;
                 String path = url.getPath();
                 if (path == null || path.equals("/")) path = "/index.html";
+                // /tours/<id>/<file> serves prefetched images (and anything
+                // else filed with a tour) from the phone, for offline runs.
+                if (path.startsWith("/tours/")) {
+                    String[] parts = path.split("/");
+                    if (parts.length == 4) {
+                        File stored = new File(Tours.dir(MainActivity.this,
+                                Tours.sanitize(parts[2])), Tours.sanitize(parts[3]));
+                        try {
+                            return new WebResourceResponse(mimeFor(path), null,
+                                    new java.io.FileInputStream(stored));
+                        } catch (IOException e) {
+                            // Falls through to the 404 below.
+                        }
+                    }
+                }
                 try {
                     InputStream in = getAssets().open("www" + path);
                     return new WebResourceResponse(mimeFor(path), "utf-8", in);
@@ -360,6 +378,34 @@ public class MainActivity extends Activity {
                     }
                 } catch (Exception e) {
                     resolveJs(callbackId, false, String.valueOf(e.getMessage()));
+                }
+            });
+        }
+
+        /** GET a URL into the tour's directory — historical pictures offline. */
+        @JavascriptInterface
+        public void downloadTourFile(String tourId, String filename, String url, int callbackId) {
+            executor.execute(() -> {
+                HttpURLConnection conn = null;
+                try {
+                    conn = (HttpURLConnection) new URL(url).openConnection();
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(30000);
+                    conn.setRequestProperty("User-Agent", "RunTour (Android)");
+                    File dir = Tours.dir(MainActivity.this, tourId);
+                    dir.mkdirs();
+                    File out = new File(dir, Tours.sanitize(filename));
+                    try (InputStream in = conn.getInputStream();
+                            java.io.FileOutputStream file = new java.io.FileOutputStream(out)) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = in.read(buf)) > 0) file.write(buf, 0, n);
+                    }
+                    resolveJs(callbackId, true, "");
+                } catch (Exception e) {
+                    resolveJs(callbackId, false, String.valueOf(e.getMessage()));
+                } finally {
+                    if (conn != null) conn.disconnect();
                 }
             });
         }

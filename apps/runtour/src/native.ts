@@ -6,6 +6,8 @@ interface RunTourBridge {
   deleteTour(id: string): void;
   synthesize(tourId: string, filename: string, text: string, lang: string, cb: number): void;
   fetchText(url: string, cb: number): void;
+  /** Absent on APKs older than the image prefetch. */
+  downloadTourFile?(tourId: string, filename: string, url: string, cb: number): void;
   playFile(tourId: string, filename: string): boolean;
   stopPlayback(): void;
   startRun(tourId: string): void;
@@ -130,4 +132,15 @@ export function sendRunAction(action: RunAction): void {
 
 export function audioFilename(placeId: string): string {
   return `${placeId.replace(/[^a-zA-Z0-9._-]/g, '_')}.wav`;
+}
+
+/** Download a URL into the tour's directory on the phone. */
+export function downloadTourFile(tourId: string, filename: string, url: string): Promise<void> {
+  if (!native?.downloadTourFile) return Promise.reject(new Error('not supported by this app'));
+  return call((cb) => native!.downloadTourFile!(tourId, filename, url, cb)).then(() => undefined);
+}
+
+export function imageFilename(placeId: string, url: string): string {
+  const ext = /\.(png|jpe?g|gif|webp)(?:[?#]|$)/i.exec(url)?.[1]?.toLowerCase() ?? 'jpg';
+  return `img_${placeId.replace(/[^a-zA-Z0-9._-]/g, '_')}.${ext}`;
 }

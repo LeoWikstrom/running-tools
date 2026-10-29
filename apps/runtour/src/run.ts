@@ -80,7 +80,7 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
   };
 
   /** Historical photos from the tour, shown while their clip plays. */
-  const placeImages = new Map<string, { name: string; image: TourPlaceImage }>();
+  const placeImages = new Map<string, { name: string; src: string; image: TourPlaceImage }>();
   let shownImageId: string | null = null;
 
   function build(): HTMLDivElement {
@@ -159,7 +159,11 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
       const tour = validateTour(JSON.parse(getTourJson(tourId)));
       placeImages.clear();
       for (const p of tour.places) {
-        if (p.image) placeImages.set(p.id, { name: p.name, image: p.image });
+        if (!p.image) continue;
+        // A prefetched file serves from the tour directory — offline-safe;
+        // without one the Commons URL needs the network.
+        const src = p.image.file ? `/tours/${tourId}/${p.image.file}` : p.image.url;
+        placeImages.set(p.id, { name: p.name, src, image: p.image });
       }
       const points = tour.route.points.map((p) => [p[0], p[1]] as [number, number]);
       courseLine = L.polyline(points, { color: PLACE_COLOR, weight: 4 }).addTo(opts.map);
@@ -231,7 +235,7 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     const playing = state.playingPlaceId ? placeImages.get(state.playingPlaceId) : undefined;
     if (playing && shownImageId !== state.playingPlaceId) {
       shownImageId = state.playingPlaceId;
-      elems.imageImg.src = playing.image.url;
+      elems.imageImg.src = playing.src;
       elems.imageImg.alt = playing.name;
       elems.imageCap.textContent =
         `${playing.name}${playing.image.year ? `, ${playing.image.year}` : ''} · ` +
