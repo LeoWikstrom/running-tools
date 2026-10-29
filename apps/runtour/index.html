@@ -47,14 +47,24 @@
         <p class="hint" id="course-stats" hidden></p>
         <p class="hint run-only" id="hint">
           Long-press the map (or Set start) to place a start, then Generate. Drag the markers to
-          move them; without a finish the course is a loop.
+          move them; without a finish the course is a loop. With a finish set, an empty length
+          means “as short as the interesting places allow”.
         </p>
         <div class="row wrap run-only">
           <button id="set-start">Set start</button>
           <button id="set-finish">Set finish</button>
           <label class="control len-control">
             <span>Length km</span>
-            <input type="number" id="gen-length" value="8" min="1" max="42" step="0.5" />
+            <input
+              type="number"
+              id="gen-length"
+              value="8"
+              min="1"
+              max="42"
+              step="0.5"
+              placeholder="shortest"
+              title="Empty with a finish set: the shortest course that still collects interesting places"
+            />
           </label>
           <button id="gen-run">Generate</button>
         </div>

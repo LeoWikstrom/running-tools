@@ -1025,6 +1025,12 @@ function setGenStatus(text: string): void {
   genStatus.hidden = text.length === 0;
 }
 
+/** Empty with a finish set: as short as the interesting places allow. */
+function targetLength(): number | null {
+  const raw = genLength.value.trim();
+  return raw === '' ? null : Number(raw) * 1000;
+}
+
 const genPin = (kind: 'start' | 'finish'): L.DivIcon =>
   L.divIcon({ className: `gen-pin ${kind}`, iconSize: [18, 18], iconAnchor: [9, 9] });
 
@@ -1185,14 +1191,19 @@ genRun.addEventListener('click', () => {
     toast('First put a start on the map — long-press where you want to begin.');
     return;
   }
+  const lengthM = targetLength();
+  if (lengthM === null && !genEnd) {
+    toast('Without a length the course needs a finish — set one or give a length.');
+    return;
+  }
+  if (lengthM !== null && !(lengthM > 0)) {
+    toast('The length needs to be a number of kilometres — or empty with a finish set.');
+    return;
+  }
   void (async () => {
     // Like profile-course: Generate over a start no saved area covers offers
     // the download first, since public Overpass servers are unreliable.
-    const { center, radiusM } = generationCircle(
-      genStart!,
-      genEnd,
-      Number(genLength.value) * 1000,
-    );
+    const { center, radiusM } = generationCircle(genStart!, genEnd, lengthM);
     const key = `${genStart!.lat.toFixed(4)},${genStart!.lon.toFixed(4)}`;
     const covered = await findCoveringArea(center, radiusM + 300).catch(() => null);
     if (
@@ -1279,7 +1290,7 @@ function startGeneration(): void {
     {
       start: genStart,
       end: genEnd,
-      targetLengthM: Number(genLength.value) * 1000,
+      targetLengthM: targetLength(),
       localLang: langInput.value.trim().toLowerCase(),
       placesSlider: Number(genPlaces.value),
       pedestrianSlider: Number(genPedestrian.value),

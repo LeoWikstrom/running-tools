@@ -19,7 +19,8 @@ export interface GenerateParams {
   start: { lat: number; lon: number };
   /** A finish point makes the course point-to-point; null means a loop. */
   end: { lat: number; lon: number } | null;
-  targetLengthM: number;
+  /** Null (needs a finish): the shortest course that still collects places. */
+  targetLengthM: number | null;
   localLang: string;
   /** 0..100 each: more places↔direct, pedestrian↔roads too, centre↔outskirts, twisty↔circular. */
   placesSlider: number;
@@ -56,7 +57,7 @@ export interface GenerationContext {
   start: { lat: number; lon: number };
   end: { lat: number; lon: number } | null;
   places: TourSearchPlace[];
-  targetLengthM: number;
+  targetLengthM: number | null;
   weights: Partial<TourWeights>;
   edges: number[];
 }
@@ -154,13 +155,16 @@ async function placesAround(
 export function generationCircle(
   start: { lat: number; lon: number },
   end: { lat: number; lon: number } | null,
-  targetLengthM: number,
+  targetLengthM: number | null,
 ): { center: { lat: number; lon: number }; radiusM: number } {
   const separation = end ? haversineMeters(start.lat, start.lon, end.lat, end.lon) : 0;
   const center = end
     ? { lat: (start.lat + end.lat) / 2, lon: (start.lon + end.lon) / 2 }
     : start;
-  return { center, radiusM: (targetLengthM / 2) * 0.6 + separation / 2 };
+  // Shortest-course mode: the course stays near the straight line, with the
+  // same detour budget the worker will allow (×1.5 plus a kilometre).
+  const length = targetLengthM ?? separation * 1.5 + 1000;
+  return { center, radiusM: (length / 2) * 0.6 + separation / 2 };
 }
 
 export function generateCourse(
@@ -175,8 +179,11 @@ export function generateCourse(
     const separation = params.end
       ? haversineMeters(params.start.lat, params.start.lon, params.end.lat, params.end.lon)
       : 0;
-    if (separation > params.targetLengthM * 1.05) {
+    if (params.targetLengthM !== null && separation > params.targetLengthM * 1.05) {
       throw new Error('Start and finish are further apart than the course length.');
+    }
+    if (params.targetLengthM === null && !params.end) {
+      throw new Error('Without a length the course needs a finish — set one or give a length.');
     }
     const { center, radiusM: radius } = generationCircle(
       params.start,

@@ -1,4 +1,5 @@
 import { buildGraph, snapToNode } from '@running/core/graph/build';
+import { dijkstra } from '@running/core/graph/dijkstra';
 import type { OverpassResponse } from '@running/core/net/overpass';
 import {
   improveTourCourse,
@@ -15,7 +16,8 @@ export interface GenerateRequest {
   /** A finish point makes the course point-to-point; null means a loop. */
   end: { lat: number; lon: number } | null;
   places: TourSearchPlace[];
-  targetLengthM: number;
+  /** Null (with a finish set): aim for the shortest interesting course. */
+  targetLengthM: number | null;
   weights: Partial<TourWeights>;
   /** An existing course's edges: skip the beam, just re-improve — used when a
       place was removed so detours to it can straighten. The graph is rebuilt
@@ -63,11 +65,25 @@ onmessage = (e: MessageEvent<GenerateRequest>) => {
     if (missingVia) {
       throw new Error(`No runnable way within 60 m of ${missingVia.name}.`);
     }
+    // No length given: the shortest path start→finish becomes the target, so
+    // lengthDiff charges exactly the extra metres a detour costs — interest
+    // has to pay for them. The tolerance opens upward to give detours room.
+    let target = targetLengthM;
+    let tolerance = lengthToleranceFrac;
+    if (target === null) {
+      if (endNode === undefined) throw new Error('Without a length the course needs a finish.');
+      const shortest = dijkstra(graph, [endNode]).dist[startNode]!;
+      if (!Number.isFinite(shortest)) {
+        throw new Error('No runnable way connects the start to the finish here.');
+      }
+      target = Math.max(shortest, 400);
+      tolerance = Math.max(tolerance ?? 0, (0.5 * target + 1000) / target);
+    }
     const options = {
-      targetLengthM,
+      targetLengthM: target,
       weights,
       endNode,
-      lengthToleranceFrac,
+      lengthToleranceFrac: tolerance,
       onProgress: (fraction: number) => post({ type: 'progress', fraction: fraction * 0.8 }),
     };
     const base = refineEdges
