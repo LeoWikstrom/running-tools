@@ -395,12 +395,13 @@ button {
   margin-bottom: 0;
 }
 
-/* The preview lives in a bar over the top of the map, clear of the sheet. */
+/* The preview lives in a bar over the top of the map, right-aligned beside
+   the map buttons so Leaflet's zoom controls stay clear on the left. */
 #preview-controls {
   position: fixed;
   top: 10px;
-  left: 10px;
   right: 52px;
+  max-width: calc(100vw - 62px);
   z-index: 900;
 }
 
