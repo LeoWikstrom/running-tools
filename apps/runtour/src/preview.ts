@@ -5,6 +5,7 @@ import {
   type RuntimeEvent,
   type RuntimeSettings,
 } from '@running/core/tour/runtime';
+import { hasNativeSpeech, speakNative, stopSpeakingNative } from './native';
 import { VARIANT_DEFAULTS } from './variant';
 
 /** The preview plays with the variant's trigger geometry, like the phone will. */
@@ -39,6 +40,11 @@ export interface PreviewHandle {
 const TICK_MS = 500;
 
 function speak(text: string, lang: string, onEnd: () => void): void {
+  if (hasNativeSpeech) {
+    // The Android WebView has no Web Speech API — the phone's voice steps in.
+    speakNative(text, lang).then(onEnd, onEnd);
+    return;
+  }
   if (!('speechSynthesis' in window)) {
     // No voice on this browser: pretend the clip took its estimated time.
     setTimeout(onEnd, 1000);
@@ -49,6 +55,11 @@ function speak(text: string, lang: string, onEnd: () => void): void {
   utterance.onend = onEnd;
   utterance.onerror = onEnd;
   speechSynthesis.speak(utterance);
+}
+
+function cancelSpeech(): void {
+  if (hasNativeSpeech) stopSpeakingNative();
+  else if ('speechSynthesis' in window) speechSynthesis.cancel();
 }
 
 /**
@@ -123,7 +134,7 @@ export function startSimulatedPreview(
   function stop(): void {
     stopped = true;
     clearInterval(timer);
-    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    cancelSpeech();
   }
 
   return {
@@ -133,7 +144,9 @@ export function startSimulatedPreview(
     },
     setPaused(p: boolean): void {
       paused = p;
-      if ('speechSynthesis' in window) {
+      // Native TTS cannot pause mid-utterance; the sentence finishes while
+      // the runner stands still, which reads as natural anyway.
+      if (!hasNativeSpeech && 'speechSynthesis' in window) {
         if (p) speechSynthesis.pause();
         else speechSynthesis.resume();
       }

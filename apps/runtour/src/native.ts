@@ -8,6 +8,9 @@ interface RunTourBridge {
   fetchText(url: string, cb: number): void;
   /** Absent on APKs older than the image prefetch. */
   downloadTourFile?(tourId: string, filename: string, url: string, cb: number): void;
+  /** Live speech for the preview; the WebView has no Web Speech API. */
+  speak?(text: string, lang: string, cb: number): void;
+  stopSpeaking?(): void;
   playFile(tourId: string, filename: string): boolean;
   stopPlayback(): void;
   startRun(tourId: string): void;
@@ -95,6 +98,17 @@ export function stopPlayback(): void {
 
 export function onPlaybackEnded(cb: () => void): void {
   window.__rtPlaybackEnded = cb;
+}
+
+export const hasNativeSpeech = !!native?.speak;
+
+/** Resolves when the utterance ends (or is interrupted by the next one). */
+export function speakNative(text: string, lang: string): Promise<void> {
+  return call((cb) => native!.speak!(text, lang, cb)).then(() => undefined);
+}
+
+export function stopSpeakingNative(): void {
+  native?.stopSpeaking?.();
 }
 
 export function startRun(tourId: string): void {

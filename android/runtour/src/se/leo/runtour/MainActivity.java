@@ -194,6 +194,13 @@ public class MainActivity extends Activity {
                 Integer callback = utterances.remove(id);
                 if (callback != null) resolveJs(callback, false, "text-to-speech failed");
             }
+
+            // tts.stop() reports here, not onDone — without this the page's
+            // promise for the interrupted clip would never settle.
+            @Override public void onStop(String id, boolean interrupted) {
+                Integer callback = utterances.remove(id);
+                if (callback != null) resolveJs(callback, true, "stopped");
+            }
         });
 
         handleIncoming(getIntent());
@@ -378,6 +385,46 @@ public class MainActivity extends Activity {
                     }
                 } catch (Exception e) {
                     resolveJs(callbackId, false, String.valueOf(e.getMessage()));
+                }
+            });
+        }
+
+        /** Speak aloud right now — the editor's preview; the WebView has no
+            Web Speech API, so the page borrows the phone's voice. */
+        @JavascriptInterface
+        public void speak(String text, String lang, int callbackId) {
+            executor.execute(() -> {
+                try {
+                    ttsReady.await();
+                    if (ttsStatus != TextToSpeech.SUCCESS) {
+                        resolveJs(callbackId, false, "text-to-speech unavailable");
+                        return;
+                    }
+                    int has = tts.setLanguage(Locale.forLanguageTag(lang));
+                    if (has == TextToSpeech.LANG_MISSING_DATA || has == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        resolveJs(callbackId, false, "no voice installed for " + lang);
+                        return;
+                    }
+                    String utteranceId = "u" + callbackId;
+                    utterances.put(utteranceId, callbackId);
+                    int queued = tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), utteranceId);
+                    if (queued != TextToSpeech.SUCCESS) {
+                        utterances.remove(utteranceId);
+                        resolveJs(callbackId, false, "could not queue speech");
+                    }
+                } catch (Exception e) {
+                    resolveJs(callbackId, false, String.valueOf(e.getMessage()));
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void stopSpeaking() {
+            runOnUiThread(() -> {
+                try {
+                    tts.stop();
+                } catch (Exception ignored) {
+                    // No speech in flight.
                 }
             });
         }
