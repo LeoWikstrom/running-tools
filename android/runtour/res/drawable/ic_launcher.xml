@@ -7,13 +7,15 @@
     <path
         android:fillColor="#2D7A4F"
         android:pathData="M54,54m-48,0a48,48 0 1,1 96,0a48,48 0 1,1 -96,0" />
-    <!-- A sound wave over a path: three arcs opening to the right. -->
+    <!-- A runner mid-stride: head, leaning torso, pumping arms, split legs. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M63,26m-7,0a7,7 0 1,1 14,0a7,7 0 1,1 -14,0" />
     <path
         android:fillColor="#00000000"
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="6"
-        android:pathData="M42,40 a16,16 0 0,1 0,28 M52,32 a26,26 0 0,1 0,44 M62,24 a36,36 0 0,1 0,60" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M30,50m-8,0a8,8 0 1,1 16,0a8,8 0 1,1 -16,0" />
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M61,36 L50,58 M59,41 L71,49 M59,43 L44,39 M50,58 L64,65 L62,81 M50,58 L41,71 L28,73" />
 </vector>

@@ -21,13 +21,11 @@ VERSION_CODE="$(date +%Y%m%d%H)"   # grows with every build, so reinstalls upgra
 VARIANT="${VARIANT:-run}"
 if [ "$VARIANT" = bus ]; then
   APP_LABEL="BusTour"
-  ICON_COLOR="#1D5FA8"
   DIST="dist-bus"
   OUT="bustour.apk"
   RENAME=(--rename-manifest-package se.leo.bustour)
 else
   APP_LABEL="RunTour"
-  ICON_COLOR="#2D7A4F"
   DIST="dist"
   OUT="runtour.apk"
   RENAME=()
@@ -85,7 +83,7 @@ mkdir -p build/gen build/classes build/dex
 # 4. resources, re-branded per variant
 cp -r res build/res-src
 sed -i "s/>RunTour</>$APP_LABEL</" build/res-src/values/strings.xml
-sed -i "s/#2D7A4F/$ICON_COLOR/" build/res-src/drawable/ic_launcher.xml
+[ "$VARIANT" = bus ] && cp variants/ic_launcher_bus.xml build/res-src/drawable/ic_launcher.xml
 aapt2 compile --dir build/res-src -o build/res.zip
 aapt2 link -o build/base.apk -I "$ANDROID_JAR" \
   --manifest AndroidManifest.xml -A assets --java build/gen \
