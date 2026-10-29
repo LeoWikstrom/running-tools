@@ -140,6 +140,21 @@ function targetSeconds(): number {
   return Number(targetSlider.value);
 }
 
+/** By the place you want ~this much of its clip already told — you see a
+    place coming up, not shrinking behind you. */
+const CLIP_HEAD_FRACTION = 0.5;
+
+/** The pipeline's trigger knows only the lead distance; once the text exists
+    the clip's own length pulls the start earlier, so a 40 s story does not
+    mostly play after the place has passed. */
+function effectiveTriggerD(p: Place): number {
+  const text = texts.get(p.id)?.text ?? '';
+  const clipSeconds = countWords(text) / WORDS_PER_SECOND;
+  const metresPerSecond = 1000 / VARIANT_DEFAULTS.paceSecPerKm;
+  const head = clipSeconds * metresPerSecond * CLIP_HEAD_FRACTION;
+  return Math.max(0, p.d - VARIANT_DEFAULTS.leadDistance - head);
+}
+
 function setCourse(name: string, points: GpxPoint[]): void {
   const lats = points.map((p) => p.lat);
   const lons = points.map((p) => p.lon);
@@ -715,7 +730,7 @@ function buildTour(): Tour {
         lat: p.lat,
         lon: p.lon,
         d: p.d,
-        triggerD: p.triggerD,
+        triggerD: effectiveTriggerD(p),
         score: p.score,
         sources: p.sources,
         text: t?.text ?? '',
@@ -934,7 +949,7 @@ function previewPlaces(): PreviewPlace[] {
   return allPlaces().map((p) => ({
     id: p.id,
     name: p.name,
-    triggerD: p.triggerD,
+    triggerD: effectiveTriggerD(p),
     text: texts.get(p.id)?.text ?? '',
   }));
 }
