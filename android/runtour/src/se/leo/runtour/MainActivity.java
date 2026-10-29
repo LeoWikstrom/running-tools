@@ -109,6 +109,20 @@ public class MainActivity extends Activity {
         applyDarkMode(ws);
         web.setWebViewClient(new WebViewClient() {
             @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri url = request.getUrl();
+                // Wikipedia and friends open in the browser; navigating the
+                // WebView away would reload the app and lose the tour.
+                if (HOST.equals(url.getHost())) return false;
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, url));
+                } catch (Exception ignored) {
+                    // No browser installed: swallow the tap rather than navigate.
+                }
+                return true;
+            }
+
+            @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();
                 if (!HOST.equals(url.getHost())) return null;

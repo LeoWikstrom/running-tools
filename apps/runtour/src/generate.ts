@@ -28,9 +28,17 @@ export interface GenerateParams {
   twistSlider: number;
   /** Only route over places with a Wikipedia page in this language. */
   requireLang: string | null;
+  /** Places already narrated by saved tours: still allowed, but cheap enough
+      that the beam prefers fresh ground. */
+  visited: { lat: number; lon: number; id?: string }[];
   /** Must-pass places: the course is required to collect each of these. */
   vias: TourSearchPlace[];
 }
+
+/** How much interest a place keeps after a saved tour already told it. */
+const VISITED_SCORE_FACTOR = 0.3;
+/** A visited entry this close to a candidate marks it as the same place. */
+const VISITED_MATCH_M = 60;
 
 export interface GeneratedCourse {
   points: [number, number][];
@@ -116,7 +124,13 @@ async function placesAround(
       lon: c.lon,
       score: interestScore(c),
     }))
-    .filter((c) => c.score >= MIN_PLACE_SCORE);
+    .filter((c) => c.score >= MIN_PLACE_SCORE)
+    .map((c) => {
+      const seen = p.visited.some(
+        (v) => v.id === c.id || haversineMeters(v.lat, v.lon, c.lat, c.lon) <= VISITED_MATCH_M,
+      );
+      return seen ? { ...c, score: Math.max(1, Math.round(c.score * VISITED_SCORE_FACTOR)) } : c;
+    });
   // Vias join the pool as required — a via already in it is simply marked.
   for (const via of p.vias) {
     const near = out.find(

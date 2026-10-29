@@ -3,11 +3,14 @@ import type { GpxPoint } from '@running/core/gpx/parse';
 import type { LatLon } from '@running/core/geo';
 import {
   buildBusAreaQuery,
+  buildBusSearchQuery,
   cropBetweenStops,
   parseBusLines,
+  type BBox,
   type BusAreaElement,
   type BusLineData,
 } from '@running/core/net/busRoutes';
+import { cacheGet, cacheSet } from '@running/core/net/cache';
 import { fetchOverpass } from '@running/core/net/overpass';
 import { fitVisible } from './ui/visibleMap';
 import { toast } from './ui/toast';
@@ -24,6 +27,37 @@ const lineLabel = (line: BusLineData): string => {
   return line.ref ? `${kind} ${line.ref} → ${line.to ?? line.name}` : line.name;
 };
 
+// Downloaded line areas persist, so revisiting a window costs nothing.
+interface StoredBusArea {
+  key: string;
+  bbox: BBox;
+  savedAt: number;
+}
+
+const AREAS_KEY = 'buslines:index:v1';
+
+async function storedBusAreas(): Promise<StoredBusArea[]> {
+  return (await cacheGet<StoredBusArea[]>(AREAS_KEY)) ?? [];
+}
+
+async function saveBusArea(key: string, bbox: BBox, lines: BusLineData[]): Promise<void> {
+  await cacheSet(`buslines:${key}`, lines);
+  const areas = (await storedBusAreas()).filter((a) => a.key !== key);
+  areas.push({ key, bbox, savedAt: Date.now() });
+  await cacheSet(AREAS_KEY, areas);
+}
+
+const covers = (outer: BBox, inner: BBox): boolean =>
+  outer.south <= inner.south &&
+  outer.west <= inner.west &&
+  outer.north >= inner.north &&
+  outer.east >= inner.east;
+
+function matchesText(line: BusLineData, text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return line.ref.toLowerCase() === t || line.name.toLowerCase().includes(t);
+}
+
 export interface BusLinesOptions {
   map: L.Map;
   sheet: HTMLElement;
@@ -33,6 +67,7 @@ export interface BusLinesOptions {
 
 export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions): void {
   const find = document.getElementById('bus-find') as HTMLButtonElement;
+  const search = document.getElementById('bus-search') as HTMLInputElement;
   const clear = document.getElementById('bus-clear') as HTMLButtonElement;
   const status = document.getElementById('bus-status') as HTMLParagraphElement;
   const list = document.getElementById('bus-list') as HTMLUListElement;
@@ -60,9 +95,9 @@ export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions):
     pick.hidden = true;
   }
 
-  function renderList(): void {
+  function renderList(shown: BusLineData[] = lines): void {
     list.replaceChildren(
-      ...lines.map((line) => {
+      ...shown.map((line) => {
         const li = document.createElement('li');
         const btn = document.createElement('button');
         btn.textContent = lineLabel(line);
@@ -71,38 +106,96 @@ export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions):
         return li;
       }),
     );
-    list.hidden = lines.length === 0;
+    list.hidden = shown.length === 0;
   }
 
-  find.addEventListener('click', () => {
+  const viewBBox = (): BBox => {
     const bounds = map.getBounds();
-    const diagonal = bounds.getNorthWest().distanceTo(bounds.getSouthEast());
-    if (diagonal > MAX_VIEW_DIAGONAL_M) {
-      setBusStatus('Zoom in a little — every line crossing this much map would be a heavy download.');
-      return;
-    }
-    const bbox = {
+    return {
       south: bounds.getSouth(),
       west: bounds.getWest(),
       north: bounds.getNorth(),
       east: bounds.getEast(),
     };
+  };
+
+  async function fetchArea(bbox: BBox): Promise<void> {
     const key =
-      `busarea:v1:${bbox.south.toFixed(3)},${bbox.west.toFixed(3)},` +
+      `${bbox.south.toFixed(3)},${bbox.west.toFixed(3)},` +
       `${bbox.north.toFixed(3)},${bbox.east.toFixed(3)}`;
+    setBusStatus('Looking for bus and tram lines… the public Overpass servers can take a minute.');
+    const response = await fetchOverpass(buildBusAreaQuery(bbox), `busarea:v1:${key}`, PATIENT);
+    lines = parseBusLines(response.elements as unknown as BusAreaElement[]);
+    await saveBusArea(key, bbox, lines);
+    renderList();
+    setBusStatus(
+      lines.length === 0
+        ? 'No bus or tram lines found here — pan or zoom and try again.'
+        : `${lines.length} lines — tap one to see it on the map (one entry per direction):`,
+    );
+  }
+
+  /** A targeted ref/name search over a widened box, for lines not yet loaded. */
+  async function fetchSearch(text: string): Promise<void> {
+    const v = viewBBox();
+    const padLat = (v.north - v.south) * 1.5;
+    const padLon = (v.east - v.west) * 1.5;
+    const bbox: BBox = {
+      south: v.south - padLat,
+      west: v.west - padLon,
+      north: v.north + padLat,
+      east: v.east + padLon,
+    };
+    setBusStatus(`Searching for “${text}”… the public Overpass servers can take a minute.`);
+    const key = `bussearch:v1:${text.toLowerCase()}:${bbox.south.toFixed(2)},${bbox.west.toFixed(2)}`;
+    const response = await fetchOverpass(buildBusSearchQuery(bbox, text), key, PATIENT);
+    const found = parseBusLines(response.elements as unknown as BusAreaElement[]);
+    // Found lines join the pool so previews and later filters stay instant.
+    const known = new Set(lines.map((l) => l.id));
+    lines = [...lines, ...found.filter((l) => !known.has(l.id))];
+    renderList(found);
+    setBusStatus(
+      found.length === 0
+        ? `Nothing named or numbered “${text}” around here.`
+        : `${found.length} lines matching “${text}”:`,
+    );
+  }
+
+  find.addEventListener('click', () => {
+    const text = search.value.trim();
     find.disabled = true;
     clearPreview();
-    setBusStatus('Looking for bus and tram lines… the public Overpass servers can take a minute.');
     void (async () => {
       try {
-        const response = await fetchOverpass(buildBusAreaQuery(bbox), key, PATIENT);
-        lines = parseBusLines(response.elements as unknown as BusAreaElement[]);
-        renderList();
-        setBusStatus(
-          lines.length === 0
-            ? 'No bus or tram lines found here — pan or zoom and try again.'
-            : `${lines.length} lines — tap one to see it on the map (one entry per direction):`,
-        );
+        if (text.length > 0) {
+          // Already-loaded lines answer instantly; Overpass only for strangers.
+          const local = lines.filter((l) => matchesText(l, text));
+          if (local.length > 0) {
+            renderList(local);
+            setBusStatus(`${local.length} lines matching “${text}”:`);
+          } else {
+            await fetchSearch(text);
+          }
+          return;
+        }
+        const view = viewBBox();
+        const bounds = map.getBounds();
+        if (bounds.getNorthWest().distanceTo(bounds.getSouthEast()) > MAX_VIEW_DIAGONAL_M) {
+          setBusStatus(
+            'Zoom in a little — every line crossing this much map would be a heavy download.',
+          );
+          return;
+        }
+        // A window fetched once serves from the store forever.
+        const area = (await storedBusAreas()).find((a) => covers(a.bbox, view));
+        const stored = area ? await cacheGet<BusLineData[]>(`buslines:${area.key}`) : undefined;
+        if (stored && stored.length > 0) {
+          lines = stored;
+          renderList();
+          setBusStatus(`${lines.length} lines (already downloaded) — tap one to preview:`);
+          return;
+        }
+        await fetchArea(view);
       } catch (err) {
         setBusStatus(err instanceof Error ? err.message : String(err));
       } finally {
@@ -110,6 +203,23 @@ export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions):
       }
     })();
   });
+
+  search.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') find.click();
+  });
+
+  // Last session's lines greet the next one; Find refreshes or widens.
+  void (async () => {
+    const areas = await storedBusAreas();
+    const latest = areas.sort((a, b) => b.savedAt - a.savedAt)[0];
+    if (!latest || selected) return;
+    const stored = await cacheGet<BusLineData[]>(`buslines:${latest.key}`);
+    if (stored && stored.length > 0 && lines.length === 0) {
+      lines = stored;
+      renderList();
+      setBusStatus(`${lines.length} lines from last time — Find lines here refreshes.`);
+    }
+  })();
 
   function fillStops(select: HTMLSelectElement, stops: BusLineData['stops']): void {
     select.replaceChildren(

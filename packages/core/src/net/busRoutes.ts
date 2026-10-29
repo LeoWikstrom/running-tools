@@ -85,6 +85,23 @@ export function buildBusAreaQuery(bbox: BBox): string {
   );
 }
 
+/**
+ * A targeted search by line number or name over a widened box. Unlike the
+ * area query, the direct relation(bbox) form is fine here: the ref/name tag
+ * filters cut the candidate set to a handful before any geometry is checked.
+ */
+export function buildBusSearchQuery(bbox: BBox, text: string): string {
+  const b = `(${bbox.south.toFixed(5)},${bbox.west.toFixed(5)},${bbox.north.toFixed(5)},${bbox.east.toFixed(5)})`;
+  const quoted = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const regex = quoted.replace(/[.*+?^${}()|[\]]/g, '\\$&');
+  return (
+    `[out:json][timeout:60];(` +
+    `relation[type=route][route~"^(bus|tram)$"]["ref"="${quoted}"]${b};` +
+    `relation[type=route][route~"^(bus|tram)$"]["name"~"${regex}",i]${b};` +
+    `)->.rt;.rt out body;way(r.rt);out geom;node(r.rt);out body;`
+  );
+}
+
 function relationToBusLine(r: OverpassRelation): BusLine | null {
   const tags = r.tags;
   if (!tags) return null;

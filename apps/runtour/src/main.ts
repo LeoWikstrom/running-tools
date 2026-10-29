@@ -38,7 +38,8 @@ import {
   type PreviewHandle,
   type PreviewPlace,
 } from './preview';
-import { native, saveTourToPhone } from './native';
+import { listTours, native, saveTourToPhone, getTourJson } from './native';
+import { loadSession, saveSession } from './session';
 import { translatorAvailable } from './translate';
 import { initRunMode } from './run';
 import { initShelf } from './shelf';
@@ -421,6 +422,9 @@ function render(): void {
   textControls.hidden = !any;
   previewControls.hidden = !any;
   el<HTMLDivElement>('list-lang-row').hidden = !any;
+  // Every state change passes through here; the tour survives the tab being
+  // discarded or the WebView reloading after a trip to the browser.
+  saveSession(course ? buildTour() : null);
 }
 
 function recompute(): void {
@@ -1064,6 +1068,21 @@ if (VARIANT === 'run') map.on('contextmenu', (e: L.LeafletMouseEvent) => {
 /** Dismissing the download prompt silences it for this start point only. */
 let areaPromptDismissedFor: string | null = null;
 
+/** Places already narrated by tours saved on the phone — the generator makes
+    them expensive so new tours find new ground, without forbidding them. */
+function visitedPlaces(): { lat: number; lon: number; id?: string }[] {
+  const out: { lat: number; lon: number; id?: string }[] = [];
+  for (const info of listTours()) {
+    try {
+      const tour = validateTour(JSON.parse(getTourJson(info.id)));
+      for (const p of tour.places) out.push({ lat: p.lat, lon: p.lon, id: p.id });
+    } catch {
+      // An unreadable stored tour just contributes nothing.
+    }
+  }
+  return out;
+}
+
 genRun.addEventListener('click', () => {
   if (generation) {
     generation.cancel();
@@ -1179,6 +1198,7 @@ function startGeneration(): void {
       centreSlider: Number(genCentre.value),
       twistSlider: Number(genTwists.value),
       requireLang: nativeOnly() ? narrationLang() : null,
+      visited: visitedPlaces(),
       vias: vias.map((v) => ({
         id: viaId(v),
         name: v.name,
@@ -1322,6 +1342,20 @@ const runMode = initRunMode({
 });
 const shelf = initShelf(el<HTMLDivElement>('shelf'), applyTour, setStatus, () => runMode.enter());
 runMode.maybeResume();
+
+// A tour in flight survives the app being reloaded (browser visits, tab
+// discards): the last editor state comes back from IndexedDB.
+void (async () => {
+  if (course) return;
+  const saved = await loadSession();
+  if (!saved || course) return;
+  try {
+    applyTour(validateTour(saved));
+    setStatus(`Tour “${saved.name}” restored from the last session.`);
+  } catch {
+    // A stale or half-written session is silently dropped.
+  }
+})();
 const savePhoneBtn = el<HTMLButtonElement>('save-phone');
 if (native) {
   savePhoneBtn.hidden = false;

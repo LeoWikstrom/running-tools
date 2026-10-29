@@ -64,8 +64,9 @@
             previews it on the map; choose the stops to ride between and create the tour —
             the places along the way and their texts follow by themselves.
           </p>
-          <div class="row">
-            <button id="bus-find">Find lines here</button>
+          <div class="row" id="bus-find-row">
+            <input type="search" id="bus-search" placeholder="Line number or name (optional)" />
+            <button id="bus-find">Find lines</button>
             <button id="bus-clear" hidden>Clear route</button>
           </div>
           <p class="hint" id="bus-status" hidden></p>

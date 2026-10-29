@@ -211,6 +211,12 @@ Seven phases; each ends in something usable. Claude Code finishes one phase, run
 
 **Phase 7 – Later** (optional): LLM rewriting of the texts with the user's API key, which also translates non-English sources reliably (the browser Translator API is already wired as a best-effort on-device fallback); official websites via the native bridge and a proxy; cloud TTS from the web; place photo in the notification; export of places as proximity-alert waypoints for a Garmin watch.
 
+**"What's going on now?" (idea, 2026-10-29)**: an opt-in layer of *current* happenings along
+the course — events you might run past, popular restaurants and bars (mined from genuine
+opinions, e.g. Reddit search), with a settings checklist choosing which kinds of places to
+include. Could be a third variant of the same codebase (a walking tour without the run), or a
+mode of runtour. Needs sources for "now" data and a way to keep clips short and fresh.
+
 ## Risks and decisions
 
 | Risk | Likelihood | Mitigation |
