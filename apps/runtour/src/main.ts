@@ -48,7 +48,7 @@ import { initShelf } from './shelf';
 import { fetchPlaceText, placeDisplayName, type PlaceText } from './texts';
 import { closeDialog, openDialog } from './ui/dialog';
 import { APP_NAME, PLACE_COLOR, THEME_COLOR, VARIANT, VARIANT_DEFAULTS } from './variant';
-import { initBusLines } from './bus';
+import { initBusLines, type BusLinesHandle } from './bus';
 import { initLocate } from './locate';
 import { fitVisible, panToVisible } from './ui/visibleMap';
 import { initSheet } from './ui/sheet';
@@ -122,6 +122,7 @@ const removedIds = new Set<string>();
 const texts = new Map<string, PlaceText>();
 /** Historical photos by place id; they travel in tour.json. */
 const images = new Map<string, TourPlaceImage>();
+let busUi: BusLinesHandle | null = null;
 const markerLayer = L.layerGroup().addTo(map);
 /** Which place editors are open, so render() keeps them open. */
 const openEditors = new Set<string>();
@@ -444,6 +445,7 @@ function render(): void {
   textControls.hidden = !any;
   previewControls.hidden = !any;
   el<HTMLDivElement>('list-lang-row').hidden = !any;
+  busUi?.reflectCourse(course !== null);
   // Every state change passes through here; the tour survives the tab being
   // discarded or the WebView reloading after a trip to the browser.
   saveSession(course ? buildTour() : null);
@@ -1432,7 +1434,7 @@ areaDownload.addEventListener('click', () => {
 void renderAreas();
 
 if (VARIANT === 'bus') {
-  initBusLines({
+  busUi = initBusLines({
     map,
     sheet,
     onRoute: (name, points) => {

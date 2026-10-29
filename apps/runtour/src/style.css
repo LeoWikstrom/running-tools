@@ -772,8 +772,11 @@ details.section[open]::details-content {
   opacity: 0;
   transition: opacity 0.3s;
   pointer-events: none;
+  cursor: pointer;
 }
 
 .toast.show {
   opacity: 1;
+  /* Clickable only while shown; faded out it must not swallow map taps. */
+  pointer-events: auto;
 }

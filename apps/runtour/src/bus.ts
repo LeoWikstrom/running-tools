@@ -63,6 +63,21 @@ function parseLineQuery(text: string): { kind?: 'bus' | 'tram'; term: string } {
   return { kind: m[1] === 'tram' || m[1] === 'spårvagn' ? 'tram' : 'bus', term: m[2]! };
 }
 
+const pointInBBox = (lat: number, lon: number, b: BBox): boolean =>
+  lat >= b.south && lat <= b.north && lon >= b.west && lon <= b.east;
+
+/** Whether the line actually crosses the view — a stored area can be much
+    bigger than the window the user is looking at. */
+function lineInView(line: BusLineData, view: BBox): boolean {
+  const pts = line.points;
+  const stride = Math.max(1, Math.floor(pts.length / 200));
+  for (let i = 0; i < pts.length; i += stride) {
+    if (pointInBBox(pts[i]!.lat, pts[i]!.lon, view)) return true;
+  }
+  const last = pts[pts.length - 1]!;
+  return pointInBBox(last.lat, last.lon, view);
+}
+
 function matchesText(line: BusLineData, text: string): boolean {
   const { kind, term } = parseLineQuery(text);
   if (kind && line.kind !== kind) return false;
@@ -80,7 +95,13 @@ export interface BusLinesOptions {
   onClear: () => void;
 }
 
-export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions): void {
+export interface BusLinesHandle {
+  /** Keeps "Clear route" in step with the editor — tours arrive from the
+      session restore, tour.json and the shelf too, not only the picker. */
+  reflectCourse(hasCourse: boolean): void;
+}
+
+export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions): BusLinesHandle {
   const find = document.getElementById('bus-find') as HTMLButtonElement;
   const search = document.getElementById('bus-search') as HTMLInputElement;
   const clear = document.getElementById('bus-clear') as HTMLButtonElement;
@@ -202,13 +223,19 @@ export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions):
           );
           return;
         }
-        // A window fetched once serves from the store forever.
+        // A window fetched once serves from the store forever — but only the
+        // lines that actually cross the window being looked at.
         const area = (await storedBusAreas()).find((a) => covers(a.bbox, view));
         const stored = area ? await cacheGet<BusLineData[]>(`buslines:${area.key}`) : undefined;
         if (stored && stored.length > 0) {
           lines = stored;
-          renderList();
-          setBusStatus(`${lines.length} lines (already downloaded) — tap one to preview:`);
+          const visible = lines.filter((l) => lineInView(l, view));
+          renderList(visible);
+          setBusStatus(
+            visible.length === 0
+              ? 'No bus or tram lines cross this view — pan or zoom and try again.'
+              : `${visible.length} lines through this view (already downloaded) — tap one:`,
+          );
           return;
         }
         await fetchArea(view);
@@ -224,17 +251,18 @@ export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions):
     if (e.key === 'Enter') find.click();
   });
 
-  // Last session's lines greet the next one; Find refreshes or widens.
+  // Last session's lines greet the next one, when any cross the start view.
   void (async () => {
     const areas = await storedBusAreas();
     const latest = areas.sort((a, b) => b.savedAt - a.savedAt)[0];
     if (!latest || selected) return;
     const stored = await cacheGet<BusLineData[]>(`buslines:${latest.key}`);
-    if (stored && stored.length > 0 && lines.length === 0) {
-      lines = stored;
-      renderList();
-      setBusStatus(`${lines.length} lines from last time — Find lines here refreshes.`);
-    }
+    if (!stored || stored.length === 0 || lines.length > 0) return;
+    lines = stored;
+    const visible = lines.filter((l) => lineInView(l, viewBBox()));
+    if (visible.length === 0) return;
+    renderList(visible);
+    setBusStatus(`${visible.length} lines from last time — Find lines refreshes.`);
   })();
 
   function fillStops(select: HTMLSelectElement, stops: BusLineData['stops']): void {
@@ -283,8 +311,14 @@ export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions):
     const noStops = line.stops.length < 2;
     fillStops(fromSel, line.stops);
     fillStops(toSel, line.stops);
-    fromSel.value = '0';
-    toSel.value = String(line.stops.length - 1);
+    // A long line defaults to the stretch inside the window being looked at —
+    // picking a line over Kålltorp should not propose Kungsbacka–Kungälv.
+    const view = viewBBox();
+    const within = line.stops
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => pointInBBox(s.lat, s.lon, view));
+    fromSel.value = String(within.length >= 2 ? within[0]!.i : 0);
+    toSel.value = String(within.length >= 2 ? within[within.length - 1]!.i : line.stops.length - 1);
     fromSel.disabled = noStops;
     toSel.disabled = noStops;
     list.hidden = true;
@@ -317,15 +351,19 @@ export function initBusLines({ map, sheet, onRoute, onClear }: BusLinesOptions):
     clearPreview();
     list.hidden = true;
     setBusStatus('');
-    clear.hidden = false;
     onRoute(name, points);
   });
 
   clear.addEventListener('click', () => {
-    clear.hidden = true;
     clearPreview();
     list.hidden = lines.length === 0;
     setBusStatus('');
     onClear();
   });
+
+  return {
+    reflectCourse(hasCourse: boolean): void {
+      clear.hidden = !hasCourse;
+    },
+  };
 }
