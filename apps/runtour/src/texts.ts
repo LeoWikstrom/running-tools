@@ -1,5 +1,6 @@
 import { fetchExtract } from '@running/core/text/summary';
-import { composeText, WORDS_PER_SECOND } from '@running/core/text/trim';
+import { composeText, stripLocationSentences, WORDS_PER_SECOND } from '@running/core/text/trim';
+import { isSquarePlace, isStreetPlace } from '@running/core/poi/score';
 import type { Place } from '@running/core/poi/types';
 import { translateBestEffort } from './translate';
 
@@ -65,6 +66,9 @@ export async function fetchPlaceText(
     // gets the review flag. The reliable path is the phase 7 LLM rewrite.
     body = (await translateBestEffort(body, extract.lang, narrationLang)) ?? body;
   }
+  // Standing on the street or the square, the listener sees where it is and
+  // what crosses it — keep the history, drop the geography lesson.
+  if (isStreetPlace(place) || isSquarePlace(place)) body = stripLocationSentences(body);
   const composed = composeText(
     placeDisplayName(place, narrationLang),
     body,

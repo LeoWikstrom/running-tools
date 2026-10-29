@@ -520,6 +520,8 @@ function recompute(): void {
         leadDistance: VARIANT_DEFAULTS.leadDistance,
         minSpacing: VARIANT_DEFAULTS.minSpacing,
         corridorWidth: VARIANT_DEFAULTS.corridorWidth,
+        excludeStreets: skipStreetsBox.checked,
+        excludeSquares: skipSquaresBox.checked,
       },
       removedIds,
       buildings,
@@ -700,6 +702,21 @@ showPreviewBox.addEventListener('change', () => {
   if (!showPreviewBox.checked) stopPreview();
   render();
 });
+
+// Streets and squares as narration subjects are a taste; both persisted.
+const skipStreetsBox = el<HTMLInputElement>('skip-streets');
+const skipSquaresBox = el<HTMLInputElement>('skip-squares');
+skipStreetsBox.checked = localStorage.getItem('runtour.skipStreets') === '1';
+skipSquaresBox.checked = localStorage.getItem('runtour.skipSquares') === '1';
+for (const [box, key] of [
+  [skipStreetsBox, 'runtour.skipStreets'],
+  [skipSquaresBox, 'runtour.skipSquares'],
+] as const) {
+  box.addEventListener('change', () => {
+    localStorage.setItem(key, box.checked ? '1' : '0');
+    if (candidates.length > 0) recompute();
+  });
+}
 
 const historicImagesBox = el<HTMLInputElement>('historic-images');
 // A rider looks at the screen; a runner mostly cannot, so only bus opts in by

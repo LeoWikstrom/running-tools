@@ -25,6 +25,19 @@ export function splitSentences(text: string): string[] {
   return parts.map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
+/**
+ * For streets and squares the listener is standing on: drop the sentences
+ * that explain where it is and which streets surround it — they can see
+ * that themselves. Swedish and English encyclopaedia phrasings; the text is
+ * kept whole if the filter would empty it.
+ */
+export function stripLocationSentences(text: string): string {
+  const location =
+    /\b(ligger|belägen|belägna|sträcker sig|går (mellan|från)|löper|leder (från|till)|förbinder|gränsar|korsar|korsas|mynnar|utgår från|avgränsas|omges av|kantas av|is located|is situated|lies (in|between|at)|runs (from|between|through)|stretches|extends (from|between)|connects|bounded by|lined (by|with)|intersects?)\b/i;
+  const kept = splitSentences(text).filter((s) => !location.test(s));
+  return kept.length > 0 ? kept.join(' ') : text;
+}
+
 export function countWords(text: string): number {
   return text.split(/\s+/).filter((w) => w.length > 0).length;
 }

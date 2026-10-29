@@ -88,6 +88,32 @@ export function isExcludedType(c: PlaceCandidate): boolean {
   return c.types.some((t) => EXCLUDED_WIKIDATA.has(t));
 }
 
+// You are standing on the street and can see the square yourself — both are
+// optional as narration subjects. P31 ids plus the names Swedish and English
+// streets and squares actually carry.
+const STREET_WIKIDATA = new Set([
+  'Q79007', // street
+  'Q34442', // road
+  'Q83620', // thoroughfare
+  'Q54114', // boulevard
+  'Q7543083', // avenue
+]);
+const STREET_NAME =
+  /(gatan|gata|vägen|leden|allén|avenyn|esplanaden|stråket|street|road|avenue|boulevard)$/i;
+
+const SQUARE_WIKIDATA = new Set([
+  'Q174782', // town square
+]);
+const SQUARE_NAME = /(torget|torg|platsen|plats|square|piazza)$/i;
+
+export function isStreetPlace(c: PlaceCandidate): boolean {
+  return c.types.some((t) => STREET_WIKIDATA.has(t)) || STREET_NAME.test(c.name.trim());
+}
+
+export function isSquarePlace(c: PlaceCandidate): boolean {
+  return c.types.some((t) => SQUARE_WIKIDATA.has(t)) || SQUARE_NAME.test(c.name.trim());
+}
+
 function hasWorthTellingType(c: PlaceCandidate): boolean {
   return c.types.some((t) => WORTH_TELLING_WIKIDATA.has(t) || WORTH_TELLING_OSM.has(t));
 }

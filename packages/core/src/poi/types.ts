@@ -50,6 +50,9 @@ export interface PoiSettings {
   leadDistance: number;
   /** Hard cap on places per tour. */
   maxPlaces: number;
+  /** Drop streets/squares as places — you are standing on them anyway. */
+  excludeStreets: boolean;
+  excludeSquares: boolean;
 }
 
 export const DEFAULT_POI_SETTINGS: PoiSettings = {
@@ -59,4 +62,6 @@ export const DEFAULT_POI_SETTINGS: PoiSettings = {
   minSpacing: 200,
   leadDistance: 30,
   maxPlaces: 25,
+  excludeStreets: false,
+  excludeSquares: false,
 };

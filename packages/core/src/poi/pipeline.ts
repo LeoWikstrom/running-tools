@@ -1,6 +1,6 @@
 import { haversineMeters } from '../geo';
 import { buildBuildingIndex, type BuildingPoly } from '../geo/los';
-import { hasSignal, interestScore, isExcludedType } from './score';
+import { hasSignal, interestScore, isExcludedType, isSquarePlace, isStreetPlace } from './score';
 import { DEFAULT_POI_SETTINGS, type Place, type PlaceCandidate, type PoiSettings } from './types';
 
 /** Along-course gap that separates two passes of the same spot. */
@@ -227,7 +227,13 @@ export function buildPlaces(
   buildings?: BuildingPoly[],
 ): Place[] {
   const s: PoiSettings = { ...DEFAULT_POI_SETTINGS, ...settings };
-  const merged = dedupeCandidates(candidates).filter((c) => hasSignal(c) && !isExcludedType(c));
+  const merged = dedupeCandidates(candidates).filter(
+    (c) =>
+      hasSignal(c) &&
+      !isExcludedType(c) &&
+      !(s.excludeStreets && isStreetPlace(c)) &&
+      !(s.excludeSquares && isSquarePlace(c)),
+  );
 
   // Line of sight: a place stays if enough of the window around its first
   // pass can see it — a corner building must not drop a place in plain view
