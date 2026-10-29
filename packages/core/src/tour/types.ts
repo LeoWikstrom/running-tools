@@ -19,6 +19,17 @@ export interface TourSettings {
   dropAfterM?: number;
 }
 
+/** A historical photo of the place, shown while its clip plays. */
+export interface TourPlaceImage {
+  /** Direct (thumb) image URL. */
+  url: string;
+  /** The Commons file page, for the licence trail. */
+  pageUrl: string;
+  /** "Artist · licence · Wikimedia Commons" — Commons licences require it. */
+  attribution: string;
+  year?: number;
+}
+
 export interface TourPlace {
   id: string;
   name: string;
@@ -35,6 +46,7 @@ export interface TourPlace {
   audio?: string;
   /** The text needs a human eye: wrong language, or hand-written. */
   needsReview?: boolean;
+  image?: TourPlaceImage;
 }
 
 export interface Tour {
@@ -113,6 +125,12 @@ export function validateTour(json: unknown): Tour {
     }
     if (typeof p.text !== 'string') fail(`place ${String(p.name)}: text missing`);
     if (!Array.isArray(p.sources)) fail(`place ${String(p.name)}: sources missing`);
+    if (p.image !== undefined) {
+      const img = p.image as Record<string, unknown>;
+      for (const field of ['url', 'pageUrl', 'attribution']) {
+        if (typeof img[field] !== 'string') fail(`place ${String(p.name)}: image.${field} bad`);
+      }
+    }
   }
   return json as Tour;
 }

@@ -1,5 +1,5 @@
 import L from 'leaflet';
-import { validateTour } from '@running/core/tour/types';
+import { validateTour, type TourPlaceImage } from '@running/core/tour/types';
 import type { LocateHandle } from './locate';
 import { fitVisible } from './ui/visibleMap';
 import { getRunState, getTourJson, sendRunAction, type RunState } from './native';
@@ -74,7 +74,14 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     buttons: HTMLDivElement;
     summary: HTMLDivElement;
     back: HTMLButtonElement;
+    image: HTMLElement;
+    imageImg: HTMLImageElement;
+    imageCap: HTMLElement;
   };
+
+  /** Historical photos from the tour, shown while their clip plays. */
+  const placeImages = new Map<string, { name: string; image: TourPlaceImage }>();
+  let shownImageId: string | null = null;
 
   function build(): HTMLDivElement {
     const box = document.createElement('div');
@@ -88,6 +95,14 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     elems.off.className = 'run-off';
     elems.off.textContent = 'Off course';
     elems.off.hidden = true;
+
+    elems.image = document.createElement('figure');
+    elems.image.className = 'place-image';
+    elems.image.hidden = true;
+    elems.imageImg = document.createElement('img');
+    elems.imageCap = document.createElement('figcaption');
+    elems.imageCap.className = 'hint';
+    elems.image.append(elems.imageImg, elems.imageCap);
 
     elems.buttons = document.createElement('div');
     elems.buttons.className = 'run-buttons';
@@ -128,6 +143,7 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     box.append(
       elems.title,
       elems.next,
+      elems.image,
       elems.stats,
       elems.off,
       elems.buttons,
@@ -141,6 +157,10 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
   function drawCourse(tourId: string): void {
     try {
       const tour = validateTour(JSON.parse(getTourJson(tourId)));
+      placeImages.clear();
+      for (const p of tour.places) {
+        if (p.image) placeImages.set(p.id, { name: p.name, image: p.image });
+      }
       const points = tour.route.points.map((p) => [p[0], p[1]] as [number, number]);
       courseLine = L.polyline(points, { color: PLACE_COLOR, weight: 4 }).addTo(opts.map);
       placeLayer = L.layerGroup().addTo(opts.map);
@@ -208,6 +228,17 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
       `${(state.dNow / 1000).toFixed(2)} / ${(state.tourDistance / 1000).toFixed(1)} km · ` +
       fmtTime(state.elapsedSeconds) + (state.paused ? ' · paused' : '');
     elems.off.hidden = !state.offCourse;
+    const playing = state.playingPlaceId ? placeImages.get(state.playingPlaceId) : undefined;
+    if (playing && shownImageId !== state.playingPlaceId) {
+      shownImageId = state.playingPlaceId;
+      elems.imageImg.src = playing.image.url;
+      elems.imageImg.alt = playing.name;
+      elems.imageCap.textContent =
+        `${playing.name}${playing.image.year ? `, ${playing.image.year}` : ''} · ` +
+        playing.image.attribution;
+    }
+    // The photo lingers after its clip: a glance can come seconds late.
+    elems.image.hidden = shownImageId === null;
     elems.pause.innerHTML = state.paused ? ICONS.play : ICONS.pause;
     elems.pause.title = state.paused ? 'Resume the run' : 'Pause the run';
     if (state.lat !== null && state.lon !== null) opts.locate.setPosition(state.lat, state.lon);

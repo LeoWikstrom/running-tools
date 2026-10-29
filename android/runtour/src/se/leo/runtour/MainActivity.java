@@ -442,6 +442,8 @@ public class MainActivity extends Activity {
                     out.put("nextPlaceName", label.substring(0, cut));
                     out.put("nextPlaceRemainingM", Long.parseLong(label.substring(cut + 1)));
                 }
+                String playing = service.playingPlaceId();
+                out.put("playingPlaceId", playing == null ? JSONObject.NULL : playing);
                 double lat = service.lastLat();
                 out.put("lat", Double.isNaN(lat) ? JSONObject.NULL : lat);
                 double lon = service.lastLon();

@@ -506,6 +506,45 @@ details.section[open]::details-content {
   border-top: 1px solid color-mix(in srgb, var(--accent-muted) 55%, transparent);
 }
 
+/* Historical photos: in place editors, the run panel, and the preview card. */
+.place-image {
+  margin: 10px 0 0;
+}
+
+.place-image img {
+  display: block;
+  width: 100%;
+  border-radius: 8px;
+}
+
+.place-image figcaption {
+  margin-top: 4px;
+}
+
+#image-card {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 950;
+  width: min(60vw, 320px);
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--panel-bg);
+  color: CanvasText;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+}
+
+#image-card img {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+}
+
+#image-card .hint {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+}
+
 /* Icon buttons over the map, below the sheet: whatever it covers, it covers. */
 #map-buttons {
   position: fixed;

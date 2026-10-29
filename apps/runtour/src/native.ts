@@ -105,6 +105,8 @@ export interface RunState {
   offCourse: boolean;
   nextPlaceName: string | null;
   nextPlaceRemainingM: number | null;
+  /** The place whose clip is sounding right now, when any. */
+  playingPlaceId: string | null;
   lat: number | null;
   lon: number | null;
   summary: { outcome: 'played' | 'dropped' | 'missed' | 'pending'; name: string }[];

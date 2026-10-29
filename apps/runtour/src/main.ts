@@ -11,7 +11,9 @@ import {
   tourToGpx,
   validateTour,
   type Tour,
+  type TourPlaceImage,
 } from '@running/core/tour/types';
+import { fetchHistoricalImage } from './images';
 import {
   deleteArea,
   findCoveringArea,
@@ -118,6 +120,8 @@ let manual: Place[] = [];
 let places: Place[] = [];
 const removedIds = new Set<string>();
 const texts = new Map<string, PlaceText>();
+/** Historical photos by place id; they travel in tour.json. */
+const images = new Map<string, TourPlaceImage>();
 const markerLayer = L.layerGroup().addTo(map);
 /** Which place editors are open, so render() keeps them open. */
 const openEditors = new Set<string>();
@@ -157,6 +161,7 @@ function setCourse(name: string, points: GpxPoint[]): void {
   places = [];
   removedIds.clear();
   texts.clear();
+  images.clear();
   openEditors.clear();
   courseLine?.remove();
   courseLine = L.polyline(
@@ -341,6 +346,23 @@ function renderEditor(p: Place, body: HTMLElement): void {
     src.innerHTML = `Source: <a href="${entry.sourceUrl}" target="_blank" rel="noopener">Wikipedia</a> (CC BY-SA)`;
   }
   body.append(area, counts, row, src);
+
+  const image = images.get(p.id);
+  if (image) {
+    const fig = document.createElement('figure');
+    fig.className = 'place-image';
+    const img = document.createElement('img');
+    img.src = image.url;
+    img.alt = `${p.name}${image.year ? `, ${image.year}` : ''}`;
+    img.loading = 'lazy';
+    const cap = document.createElement('figcaption');
+    cap.className = 'hint';
+    cap.innerHTML =
+      `${image.year ?? 'Historical'} · <a href="${image.pageUrl}" target="_blank" rel="noopener">` +
+      `${image.attribution}</a>`;
+    fig.append(img, cap);
+    body.appendChild(fig);
+  }
 }
 
 const placeMarkers = new Map<string, L.CircleMarker>();
@@ -535,13 +557,16 @@ function applyTour(tour: Tour): void {
   tourId = tour.id;
   targetSlider.value = String(tour.settings.targetSeconds);
   targetOutput.textContent = targetSlider.value;
-  places = tour.places.map((p) => ({
+  // `image` stays out of the spread: Place inherits PlaceCandidate's string
+  // `image` (a Wikidata photo URL); the historical photo lives in `images`.
+  places = tour.places.map(({ image: _image, ...p }) => ({
     ...p,
     types: [],
     offset: 0,
     sources: p.sources,
   }));
   for (const p of tour.places) {
+    if (p.image) images.set(p.id, p.image);
     if (p.text) {
       texts.set(p.id, {
         text: p.text,
@@ -596,9 +621,40 @@ async function runFindPlaces(): Promise<boolean> {
 
 findButton.addEventListener('click', () =>
   void (async () => {
-    if (await runFindPlaces()) await runFetchTexts();
+    if (await runFindPlaces()) {
+      await runFetchTexts();
+      await runFetchImages();
+    }
   })(),
 );
+
+const historicImagesBox = el<HTMLInputElement>('historic-images');
+// A rider looks at the screen; a runner mostly cannot, so only bus opts in by
+// default. The box lives in both builds.
+historicImagesBox.checked = VARIANT === 'bus';
+
+async function runFetchImages(): Promise<void> {
+  if (!historicImagesBox.checked) return;
+  const list = allPlaces().filter((p) => !images.has(p.id));
+  if (list.length === 0) return;
+  let done = 0;
+  let found = 0;
+  for (const p of list) {
+    const got = await fetchHistoricalImage(p.lat, p.lon).catch(() => null);
+    if (got) {
+      images.set(p.id, got);
+      found++;
+    }
+    done++;
+    setStatus(`Looking for historical pictures ${done}/${list.length}…`);
+  }
+  render();
+  setStatus(
+    found === 0
+      ? 'No historical pictures found on Wikimedia Commons for these places.'
+      : `Historical pictures found for ${found} of ${list.length} places.`,
+  );
+}
 
 async function runFetchTexts(): Promise<void> {
   const list = allPlaces().filter((p) => (texts.get(p.id)?.text.length ?? 0) === 0);
@@ -655,6 +711,7 @@ function buildTour(): Tour {
         sources: p.sources,
         text: t?.text ?? '',
         needsReview: t ? t.needsReview && !t.reviewed : true,
+        image: images.get(p.id),
       };
     }),
   };
@@ -834,6 +891,34 @@ previewBtn.textContent = PREVIEW_LABEL;
 let preview: PreviewHandle | null = null;
 let runnerMarker: L.CircleMarker | null = null;
 
+/** The floating photo over the map while a clip plays in the preview. */
+let imageCard: HTMLDivElement | null = null;
+function showImageCard(placeId: string, name: string): void {
+  const image = images.get(placeId);
+  if (!image) {
+    hideImageCard();
+    return;
+  }
+  if (!imageCard) {
+    imageCard = document.createElement('div');
+    imageCard.id = 'image-card';
+    imageCard.addEventListener('click', hideImageCard);
+    document.body.appendChild(imageCard);
+  }
+  imageCard.innerHTML = '';
+  const img = document.createElement('img');
+  img.src = image.url;
+  img.alt = name;
+  const cap = document.createElement('p');
+  cap.className = 'hint';
+  cap.textContent = `${name}${image.year ? `, ${image.year}` : ''} · ${image.attribution}`;
+  imageCard.append(img, cap);
+  imageCard.hidden = false;
+}
+function hideImageCard(): void {
+  if (imageCard) imageCard.hidden = true;
+}
+
 function parsePace(value: string): number {
   const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
   if (!m) return VARIANT_DEFAULTS.paceSecPerKm;
@@ -852,6 +937,7 @@ function previewPlaces(): PreviewPlace[] {
 function stopPreview(): void {
   preview?.stop();
   preview = null;
+  hideImageCard();
   runnerMarker?.remove();
   runnerMarker = null;
   previewBtn.textContent = PREVIEW_LABEL;
@@ -884,6 +970,7 @@ previewBtn.addEventListener('click', () => {
     },
     onSpeak(place: PreviewPlace) {
       setStatus(`▶ ${place.name}`);
+      showImageCard(place.id, place.name);
       const at = runnerMarker?.getLatLng();
       if (at) panToVisible(map, sheet, at.lat, at.lng);
     },
@@ -962,6 +1049,7 @@ function clearCourse(): void {
   places = [];
   removedIds.clear();
   texts.clear();
+  images.clear();
   openEditors.clear();
   courseLine?.remove();
   courseLine = null;
@@ -1222,7 +1310,10 @@ function startGeneration(): void {
       setGenStatus(
         `${(generated.lengthM / 1000).toFixed(2)} km touching ${generated.collected.length} places.`,
       );
-      if (await runFindPlaces()) await runFetchTexts();
+      if (await runFindPlaces()) {
+        await runFetchTexts();
+        await runFetchImages();
+      }
     })
     .catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
@@ -1323,7 +1414,10 @@ if (VARIANT === 'bus') {
       setCourse(name, points);
       render();
       void (async () => {
-        if (await runFindPlaces()) await runFetchTexts();
+        if (await runFindPlaces()) {
+          await runFetchTexts();
+          await runFetchImages();
+        }
       })();
     },
     onClear: () => {

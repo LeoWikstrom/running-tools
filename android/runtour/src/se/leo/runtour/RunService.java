@@ -389,6 +389,11 @@ public class RunService extends Service implements LocationListener {
         return tourId;
     }
 
+    /** The place whose clip is sounding right now, or null. */
+    public String playingPlaceId() {
+        return playingId;
+    }
+
     public double lastLat() {
         return lastLat;
     }
