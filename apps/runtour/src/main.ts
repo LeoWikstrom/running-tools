@@ -1472,6 +1472,12 @@ void (async () => {
   try {
     applyTour(validateTour(saved));
     setStatus(`Tour “${saved.name}” restored from the last session.`);
+    // setCourse fitted the map, but at startup the sheet is still settling
+    // into its first stop — its box can momentarily cover the whole screen,
+    // squeezing the fit into a sliver. Fit again once layout is done.
+    window.setTimeout(() => {
+      if (courseLine) fitVisible(map, sheet, courseLine.getBounds());
+    }, 250);
   } catch {
     // A stale or half-written session is silently dropped.
   }
