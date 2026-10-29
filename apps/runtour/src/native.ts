@@ -19,6 +19,8 @@ declare global {
   interface Window {
     RunTour?: RunTourBridge;
     __rtResolve?: (id: number, ok: boolean, payload: string) => void;
+    /** Called by the app when a manually played clip reaches its end. */
+    __rtPlaybackEnded?: () => void;
   }
 }
 
@@ -89,6 +91,10 @@ export function playFile(tourId: string, filename: string): boolean {
 
 export function stopPlayback(): void {
   native?.stopPlayback();
+}
+
+export function onPlaybackEnded(cb: () => void): void {
+  window.__rtPlaybackEnded = cb;
 }
 
 export function startRun(tourId: string): void {

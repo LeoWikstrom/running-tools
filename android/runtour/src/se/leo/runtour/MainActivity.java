@@ -445,6 +445,8 @@ public class MainActivity extends Activity {
                             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                             .build());
                     player.setDataSource(file.getAbsolutePath());
+                    player.setOnCompletionListener((mp) -> web.evaluateJavascript(
+                            "window.__rtPlaybackEnded && window.__rtPlaybackEnded()", null));
                     player.prepare();
                     player.start();
                 } catch (Exception e) {

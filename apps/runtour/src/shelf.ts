@@ -7,6 +7,7 @@ import {
   imageFilename,
   listTours,
   native,
+  onPlaybackEnded,
   playFile,
   saveTourToPhone,
   startRun,
@@ -35,6 +36,14 @@ export function initShelf(
 
   /** The audio buttons' click actions by tour id, for generate(). */
   const generators = new Map<string, () => void>();
+
+  /** The ▶ that is sounding right now; it reads ■ until stopped or done. */
+  let playingBtn: HTMLButtonElement | null = null;
+  const resetPlaying = (): void => {
+    if (playingBtn) playingBtn.textContent = '▶';
+    playingBtn = null;
+  };
+  onPlaybackEnded(resetPlaying);
 
   function generateAudio(id: string, progress: HTMLProgressElement): Promise<void> {
     return (async () => {
@@ -91,8 +100,16 @@ export function initShelf(
         play.textContent = '▶';
         play.title = `Play the clip for ${p.name}`;
         play.addEventListener('click', () => {
+          const wasPlaying = playingBtn === play;
           stopPlayback();
-          if (!playFile(tour.id, p.audio!)) setStatus(`Audio file missing for ${p.name}.`);
+          resetPlaying();
+          if (wasPlaying) return;
+          if (!playFile(tour.id, p.audio!)) {
+            setStatus(`Audio file missing for ${p.name}.`);
+            return;
+          }
+          play.textContent = '■';
+          playingBtn = play;
         });
         row.appendChild(play);
       }
