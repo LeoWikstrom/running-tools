@@ -11,10 +11,14 @@ import {
 } from '@running/core/poi/wikipedia';
 import { fetchItemsAround, itemsToCandidates } from '@running/core/poi/wikidata';
 import type { PlaceCandidate } from '@running/core/poi/types';
+import { VARIANT_DEFAULTS } from './variant';
 
 const CENTER_RADIUS_M = 2500;
 /** OSM corridor is wider than the place corridor: squares and parks are big. */
-const OSM_CORRIDOR_M = 150;
+const OSM_CORRIDOR_M = Math.max(150, VARIANT_DEFAULTS.corridorWidth);
+/** Buildings must cover every sightline, which can angle a bit beyond the
+    place corridor from the samples along the sight window. */
+const BUILDINGS_CORRIDOR_M = VARIANT_DEFAULTS.corridorWidth + 100;
 
 export interface FetchReport {
   candidates: PlaceCandidate[];
@@ -62,7 +66,7 @@ export async function fetchCandidates(
 
   // Footprints ride along with the sources; losing them only loses the
   // line-of-sight filter, so a failure is reported but not fatal.
-  const buildingsPromise = fetchBuildings(lats, lons, OSM_CORRIDOR_M).catch(() => null);
+  const buildingsPromise = fetchBuildings(lats, lons, BUILDINGS_CORRIDOR_M).catch(() => null);
 
   const centers = sampleCenters(lats, lons, CENTER_RADIUS_M);
   const langs = localLang && localLang !== 'en' ? ['en', localLang] : ['en'];

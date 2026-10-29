@@ -253,6 +253,11 @@ button {
   min-height: 36px;
 }
 
+/* .grow-control zeroes the controls' own margin; breathe before the buttons. */
+#bus-pick .row + .row {
+  margin-top: 14px;
+}
+
 #bus-use {
   background: var(--accent);
   color: white;

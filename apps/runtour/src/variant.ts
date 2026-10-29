@@ -17,6 +17,9 @@ export interface VariantDefaults {
   triggerWindowM: number;
   /** Player: drop a queued clip once this far past its trigger, metres. */
   dropAfterM: number;
+  /** Lateral reach of the place search, metres. A tram window sweeps much
+      further than a runner's eyes; line of sight culls what walls hide. */
+  corridorWidth: number;
 }
 
 export const VARIANT_DEFAULTS: VariantDefaults =
@@ -27,6 +30,7 @@ export const VARIANT_DEFAULTS: VariantDefaults =
         minSpacing: 350,
         triggerWindowM: 300,
         dropAfterM: 450,
+        corridorWidth: 350,
       }
     : {
         paceSecPerKm: 330,
@@ -34,4 +38,5 @@ export const VARIANT_DEFAULTS: VariantDefaults =
         minSpacing: 200,
         triggerWindowM: 150,
         dropAfterM: 200,
+        corridorWidth: 60,
       };

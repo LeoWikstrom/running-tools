@@ -431,7 +431,11 @@ function recompute(): void {
       course.lats,
       course.lons,
       pool,
-      { leadDistance: VARIANT_DEFAULTS.leadDistance, minSpacing: VARIANT_DEFAULTS.minSpacing },
+      {
+        leadDistance: VARIANT_DEFAULTS.leadDistance,
+        minSpacing: VARIANT_DEFAULTS.minSpacing,
+        corridorWidth: VARIANT_DEFAULTS.corridorWidth,
+      },
       removedIds,
       buildings,
     );
