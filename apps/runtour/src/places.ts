@@ -58,8 +58,16 @@ export async function fetchCandidates(
     const stored = await loadAreaPlaces(area.id);
     if (stored && stored.length > 0) {
       onProgress('Places from the downloaded area.');
-      // Areas from before buildings existed simply skip line of sight.
-      const buildings = (await loadAreaBuildings(area.id)) ?? [];
+      let buildings = await loadAreaBuildings(area.id);
+      if (!buildings) {
+        // The area predates footprints. The corridor's buildings are a small
+        // fetch, so get them live rather than running without line of sight;
+        // actually offline right now, it just stays off for this course.
+        onProgress('Fetching the buildings for line of sight…');
+        buildings = await fetchBuildings(lats, lons, BUILDINGS_CORRIDOR_M).catch(
+          () => [] as BuildingPoly[],
+        );
+      }
       return { candidates: stored, buildings, failures: [] };
     }
   }
