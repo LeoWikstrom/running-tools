@@ -102,6 +102,14 @@ export function initRunMode(opts: RunModeOptions): RunModeHandle {
     elems.image.className = 'place-image';
     elems.image.hidden = true;
     elems.imageImg = document.createElement('img');
+    // A tour.json moved from another phone references files that never
+    // landed here — fall back to the Commons URL rather than a broken image.
+    elems.imageImg.addEventListener('error', () => {
+      const playing = shownImageId ? placeImages.get(shownImageId) : undefined;
+      if (playing && !elems.imageImg.src.endsWith(playing.image.url)) {
+        elems.imageImg.src = playing.image.url;
+      }
+    });
     elems.imageCap = document.createElement('figcaption');
     elems.imageCap.className = 'hint';
     elems.image.append(elems.imageImg, elems.imageCap);

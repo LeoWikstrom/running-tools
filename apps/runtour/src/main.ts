@@ -23,9 +23,9 @@ import {
   saveAreaPlaces,
 } from '@running/core/net/areaStore';
 import { buildBuildingIndex, type BuildingIndex, type BuildingPoly } from '@running/core/geo/los';
-import { fetchAreaBuildings } from '@running/core/poi/buildings';
+import { fetchAreaBuildings, fetchBuildings } from '@running/core/poi/buildings';
 import { fetchNetwork } from '@running/core/net/overpass';
-import { fetchCandidates, searchPlacesByName } from './places';
+import { BUILDINGS_CORRIDOR_M, fetchCandidates, searchPlacesByName } from './places';
 import {
   fetchAreaCandidates,
   generateCourse,
@@ -1555,6 +1555,15 @@ void (async () => {
   try {
     applyTour(validateTour(saved));
     setStatus(`Tour “${saved.name}” restored from the last session.`);
+    // The session carries no footprints; without them a re-export would lose
+    // the sight-gated triggers. Usually instant — the fetch is idb-cached.
+    void fetchBuildings(course!.lats, course!.lons, BUILDINGS_CORRIDOR_M)
+      .then((got) => {
+        if (!course) return;
+        buildings = got;
+        losIndex = got.length > 0 ? buildBuildingIndex(got) : null;
+      })
+      .catch(() => {});
     // setCourse fitted the map against the still-settling sheet. Fit again —
     // into the upper half of the screen (the sheet owns the lower), without
     // animation so nothing in flight can override it, and once more later in

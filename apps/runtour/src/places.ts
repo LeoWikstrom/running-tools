@@ -18,7 +18,7 @@ const CENTER_RADIUS_M = 2500;
 const OSM_CORRIDOR_M = Math.max(150, VARIANT_DEFAULTS.corridorWidth);
 /** Buildings must cover every sightline, which can angle a bit beyond the
     place corridor from the samples along the sight window. */
-const BUILDINGS_CORRIDOR_M = VARIANT_DEFAULTS.corridorWidth + 100;
+export const BUILDINGS_CORRIDOR_M = VARIANT_DEFAULTS.corridorWidth + 100;
 
 export interface FetchReport {
   candidates: PlaceCandidate[];
