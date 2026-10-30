@@ -21,6 +21,10 @@ export interface GraphEdge {
    * elevation is interpolated between the endpoints instead.
    */
   levelled: boolean;
+  /** Bridge specifically, not a tunnel — levelled doesn't tell them apart,
+      and only a bridge can sensibly be guessed to rise (shapeBridgeChains'
+      opt-in estimate for bridges OSM has not tagged with ele). */
+  isBridge: boolean;
   /** OSM ele tag (metres) — tall bridge decks carry it (e.g. Älvsborgsbron ele=50). */
   eleTag: number | null;
   /** Distances (m from the a-end) of internal turns along the edge geometry. */

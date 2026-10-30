@@ -118,6 +118,9 @@ const surfaceSelect = document.getElementById('surface-select') as HTMLSelectEle
 const returnToggle = document.getElementById('return-toggle') as HTMLInputElement;
 const startAnywhereToggle = document.getElementById('start-anywhere') as HTMLInputElement;
 const connectorsToggle = document.getElementById('connectors-toggle') as HTMLInputElement;
+const estimateBridgeHeightToggle = document.getElementById(
+  'estimate-bridge-height',
+) as HTMLInputElement;
 const areaRadius = document.getElementById('area-radius') as HTMLSelectElement;
 const downloadAreaButton = document.getElementById('download-area') as HTMLButtonElement;
 const areaProgress = document.getElementById('area-progress') as HTMLProgressElement;
@@ -1081,6 +1084,7 @@ function readUrlState(): void {
   flag('rts', returnToggle);
   flag('sa', startAnywhereToggle);
   flag('conn', connectorsToggle);
+  flag('ebh', estimateBridgeHeightToggle);
   flag('tr', useTraces);
   reflectUseTraces();
   const alg = get('alg', 'beam');
@@ -1142,6 +1146,7 @@ function writeUrlState(): void {
   put('rts', returnToggle.checked ? '1' : '0', '0');
   put('sa', startAnywhereToggle.checked ? '1' : '0', '0');
   put('conn', connectorsToggle.checked ? '1' : '0', '0');
+  put('ebh', estimateBridgeHeightToggle.checked ? '1' : '0', '0');
   put('tr', useTraces.checked ? '1' : '0', '0');
   put('alg', algorithmSelect.value === 'walk' ? 'walk' : 'beam', 'beam');
   put('vt', String(Number(viaToleranceInput.value) || 0.3), viaToleranceInput.defaultValue);
@@ -1179,6 +1184,7 @@ function writeUrlState(): void {
     returnToStart: returnToggle.checked,
     startAnywhere: startAnywhereToggle.checked,
     connectors: connectorsToggle.checked,
+    estimateBridgeHeight: estimateBridgeHeightToggle.checked,
     useTraces: useTraces.checked,
     seed,
     beamWidth: Number(beamWidthInput.value) || 400,
@@ -1230,6 +1236,7 @@ function startSearch(): void {
     startAtPoint: !startAnywhereToggle.checked || returnToggle.checked,
     weights: collectWeights(),
     connectors: connectorsToggle.checked,
+    estimateBridgeHeight: estimateBridgeHeightToggle.checked,
     beamWidth: Number(beamWidthInput.value) || 400,
     viaPoints,
     viaToleranceKm: Number(viaToleranceInput.value) || 0.3,
@@ -1884,6 +1891,7 @@ async function importCourseGpx(file: File | undefined): Promise<void> {
       target: targetTransfer(profile),
       desiredMix: SURFACE_PRESETS[surfaceSelect.value] ?? SURFACE_PRESETS['road']!,
       weights: collectWeights(),
+      estimateBridgeHeight: estimateBridgeHeightToggle.checked,
     });
   } catch (err) {
     startHint.textContent = err instanceof Error ? err.message : String(err);

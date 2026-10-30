@@ -176,6 +176,130 @@ describe('bridge and tunnel handling', () => {
     const approach = graph.edges.find((e) => !e.levelled)!;
     for (const v of approach.elev!) expect(v).toBeCloseTo(5, 3);
   });
+
+  /** Flat ground everywhere — same shape sampleEdgeElevations would see for
+      Hisingsbron/Marieholmsbron, which carry bridge=yes and no ele tag. */
+  class FlatSampler {
+    async elevations(lats: ArrayLike<number>): Promise<Float32Array> {
+      return new Float32Array(lats.length).fill(5);
+    }
+  }
+
+  function longUntaggedBridgeResponse(): OverpassResponse {
+    return {
+      elements: [
+        { type: 'node', id: 1, lat: 57.696, lon: 12.03 },
+        { type: 'node', id: 2, lat: 57.7, lon: 12.03 }, // bridgehead A
+        { type: 'node', id: 3, lat: 57.704, lon: 12.03 }, // mid-chain junction
+        { type: 'node', id: 4, lat: 57.708, lon: 12.03 }, // bridgehead B, ~890 m chain
+        { type: 'way', id: 9, nodes: [1, 2], tags: { highway: 'path' } },
+        { type: 'way', id: 10, nodes: [2, 3], tags: { highway: 'path', bridge: 'yes' } },
+        { type: 'way', id: 11, nodes: [3, 4], tags: { highway: 'path', bridge: 'yes' } },
+      ],
+    };
+  }
+
+  it('leaves an untagged bridge flat by default (estimateBridgeHeight off)', async () => {
+    const { sampleEdgeElevations } = await import('../src/graph/build');
+    const { TerrainSampler } = await import('../src/net/terrain');
+    const graph = buildGraph(longUntaggedBridgeResponse());
+    class FullSampler extends TerrainSampler {
+      constructor() {
+        super(13, () => {
+          throw new Error('no network');
+        });
+      }
+      override async elevations(lats: ArrayLike<number>): Promise<Float32Array> {
+        return new FlatSampler().elevations(lats);
+      }
+    }
+    await sampleEdgeElevations(graph, new FullSampler());
+    const decks = graph.edges.filter((e) => e.isBridge);
+    expect(decks.length).toBe(2);
+    const all = decks.flatMap((d) => [...d.elev!]);
+    // No modeled crest: flat interpolation between the (equal) endpoints.
+    for (const v of all) expect(v).toBeCloseTo(5, 3);
+  });
+
+  it('estimates a rise for a long untagged bridge chain when asked', async () => {
+    const { sampleEdgeElevations } = await import('../src/graph/build');
+    const { TerrainSampler } = await import('../src/net/terrain');
+    const graph = buildGraph(longUntaggedBridgeResponse());
+    class FullSampler extends TerrainSampler {
+      constructor() {
+        super(13, () => {
+          throw new Error('no network');
+        });
+      }
+      override async elevations(lats: ArrayLike<number>): Promise<Float32Array> {
+        return new FlatSampler().elevations(lats);
+      }
+    }
+    await sampleEdgeElevations(graph, new FullSampler(), { estimateBridgeHeight: true });
+    const decks = graph.edges.filter((e) => e.isBridge);
+    const all = decks.flatMap((d) => [...d.elev!]);
+    const maxElev = Math.max(...all);
+    // ~890 m chain: 3 % guess clamps to the 25 m ceiling, above the 5 m ground.
+    expect(maxElev).toBeGreaterThan(5 + 15);
+    expect(maxElev).toBeLessThanOrEqual(5 + 25 + 0.1);
+    // Chain ends back at ground, same shape as the ele-tagged trapezoid.
+    const first = decks[0]!;
+    const endsAtGround =
+      Math.abs(first.elev![0]! - 5) < 0.1 || Math.abs(first.elev![first.elev!.length - 1]! - 5) < 0.1;
+    expect(endsAtGround).toBe(true);
+  });
+
+  it('never estimates a rise for a tunnel, even when asked', async () => {
+    const { sampleEdgeElevations } = await import('../src/graph/build');
+    const { TerrainSampler } = await import('../src/net/terrain');
+    const response: OverpassResponse = {
+      elements: [
+        { type: 'node', id: 1, lat: 57.7, lon: 12.03 },
+        { type: 'node', id: 2, lat: 57.708, lon: 12.03 }, // ~890 m, long enough to qualify
+        { type: 'way', id: 10, nodes: [1, 2], tags: { highway: 'path', tunnel: 'yes' } },
+      ],
+    };
+    const graph = buildGraph(response);
+    expect(graph.edges[0]!.isBridge).toBe(false);
+    expect(graph.edges[0]!.levelled).toBe(true);
+    class FullSampler extends TerrainSampler {
+      constructor() {
+        super(13, () => {
+          throw new Error('no network');
+        });
+      }
+      override async elevations(lats: ArrayLike<number>): Promise<Float32Array> {
+        return new FlatSampler().elevations(lats);
+      }
+    }
+    await sampleEdgeElevations(graph, new FullSampler(), { estimateBridgeHeight: true });
+    for (const v of graph.edges[0]!.elev!) expect(v).toBeCloseTo(5, 3);
+  });
+
+  it('leaves a short untagged bridge flat even when asked', async () => {
+    const { sampleEdgeElevations } = await import('../src/graph/build');
+    const { TerrainSampler } = await import('../src/net/terrain');
+    const response: OverpassResponse = {
+      elements: [
+        { type: 'node', id: 1, lat: 57.7, lon: 12.03 },
+        { type: 'node', id: 2, lat: 57.70027, lon: 12.03 }, // ~30 m: below the threshold
+        { type: 'way', id: 10, nodes: [1, 2], tags: { highway: 'path', bridge: 'yes' } },
+      ],
+    };
+    const graph = buildGraph(response);
+    class FullSampler extends TerrainSampler {
+      constructor() {
+        super(13, () => {
+          throw new Error('no network');
+        });
+      }
+      override async elevations(lats: ArrayLike<number>): Promise<Float32Array> {
+        return new FlatSampler().elevations(lats);
+      }
+    }
+    await sampleEdgeElevations(graph, new FullSampler(), { estimateBridgeHeight: true });
+    for (const v of graph.edges[0]!.elev!) expect(v).toBeCloseTo(5, 3);
+  });
 });
 
 describe('traffic signals and corridor cells', () => {

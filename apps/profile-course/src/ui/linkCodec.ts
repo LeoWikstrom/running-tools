@@ -18,6 +18,7 @@ export interface LinkState {
   returnToStart: boolean;
   startAnywhere: boolean;
   connectors: boolean;
+  estimateBridgeHeight: boolean;
   useTraces: boolean;
   seed: number;
   beamWidth: number;
@@ -85,7 +86,8 @@ export function encodeLink(s: LinkState): string {
       (s.returnToStart ? 8 : 0) |
       (s.startAnywhere ? 16 : 0) |
       (s.connectors ? 32 : 0) |
-      (s.useTraces ? 64 : 0),
+      (s.useTraces ? 64 : 0) |
+      (s.estimateBridgeHeight ? 128 : 0),
   );
   dv.setUint8(23, u8(s.viaToleranceKm * 10));
   dv.setUint8(24, weights.length);
@@ -148,6 +150,7 @@ export function decodeLink(packed: string): LinkState | null {
     startAnywhere: (flags & 16) !== 0,
     connectors: (flags & 32) !== 0,
     useTraces: (flags & 64) !== 0,
+    estimateBridgeHeight: (flags & 128) !== 0,
     viaToleranceKm: dv.getUint8(23) / 10,
     weights,
     vias,
@@ -169,6 +172,7 @@ export function linkStateToParams(s: LinkState): string {
     `rts=${s.returnToStart ? 1 : 0}`,
     `sa=${s.startAnywhere ? 1 : 0}`,
     `conn=${s.connectors ? 1 : 0}`,
+    `ebh=${s.estimateBridgeHeight ? 1 : 0}`,
     `tr=${s.useTraces ? 1 : 0}`,
     `alg=${s.algorithm}`,
     `vt=${s.viaToleranceKm}`,

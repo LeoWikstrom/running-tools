@@ -430,6 +430,7 @@ export function buildGraph(response: OverpassResponse, opts: { connectors?: bool
       if (lengthM < 1) continue;
       const last = lats.length - 1;
       const bridge = tags['bridge'];
+      const isBridge = !!bridge && bridge !== 'no';
       const tunnel = tags['tunnel'];
       const ele = Number.parseFloat(tags['ele'] ?? '');
       let signals = 0;
@@ -450,7 +451,8 @@ export function buildGraph(response: OverpassResponse, opts: { connectors?: bool
         lats,
         lons,
         elev: null,
-        levelled: (!!bridge && bridge !== 'no') || (!!tunnel && tunnel !== 'no'),
+        levelled: isBridge || (!!tunnel && tunnel !== 'no'),
+        isBridge,
         turnOffsets: Float64Array.from(turnPositions(lats, lons)),
         headOutA: bearingDeg(lats[0]!, lons[0]!, lats[1]!, lons[1]!),
         headInB: bearingDeg(lats[last - 1]!, lons[last - 1]!, lats[last]!, lons[last]!),
@@ -677,20 +679,30 @@ export function edgeSamplePositions(edge: GraphEdge): { lats: Float64Array; lons
   return { lats, lons };
 }
 
-/** Fraction of an ele-tagged bridge chain that ramps up on each side. */
+/** Fraction of a bridge chain that ramps up/down on each side of its crest. */
 const CHAIN_RAMP_FRACTION = 0.4;
+/** Below this, a bridge is left as sampleEdgeElevations' flat interpolation —
+    a culvert or short footbridge over a creek has no real "crest" to guess. */
+const MIN_ESTIMATE_CHAIN_M = 80;
+/** A crude stand-in for a real ele tag: the total rise guessed for an
+    untagged bridge, as a fraction of its length (~3% average grade). */
+const ESTIMATE_RISE_FRACTION = 0.03;
+const MIN_ESTIMATED_RISE_M = 3;
+const MAX_ESTIMATED_RISE_M = 25;
 
-/**
- * Model each chain of connected ele-tagged bridge edges as a trapezoid:
- * ground elevation at the chain ends, linear ramps over 40 % of the length
- * on each side, and a crest at the ele tag in the middle. A flat plateau at
- * deck height mismatched the real profile of Älvsborgsbron (climb, short
- * crest, descent) so badly that the scorer rejected the real race route.
- */
-export function shapeBridgeChains(graph: Graph): void {
-  const isDeck = (e: GraphEdge) => e.levelled && e.eleTag !== null && e.elev !== null;
-  const assigned = new Set<number>();
+interface ChainLink {
+  ei: number;
+  fromNode: number;
+}
 
+/** Walk a connected run of `isDeck` edges from `seed` to one end, then back
+    to the other, in order — marking each edge assigned as it is collected. */
+function collectChain(
+  graph: Graph,
+  seed: number,
+  isDeck: (e: GraphEdge) => boolean,
+  assigned: Set<number>,
+): ChainLink[] {
   const deckAt = (node: number, exclude: number): number => {
     for (let k = graph.adjOffset[node]!; k < graph.adjOffset[node + 1]!; k++) {
       const ei = graph.adjEdge[k]!;
@@ -699,70 +711,124 @@ export function shapeBridgeChains(graph: Graph): void {
     return -1;
   };
 
-  for (let seed = 0; seed < graph.edges.length; seed++) {
-    if (assigned.has(seed) || !isDeck(graph.edges[seed]!)) continue;
+  let startEdge = seed;
+  let startNode = graph.edges[seed]!.a;
+  for (;;) {
+    const prev = deckAt(startNode, startEdge);
+    if (prev < 0) break;
+    startEdge = prev;
+    startNode = otherNode(graph.edges[prev]!, startNode);
+  }
+  const chain: ChainLink[] = [];
+  let node = startNode;
+  let ei = startEdge;
+  for (;;) {
+    chain.push({ ei, fromNode: node });
+    assigned.add(ei);
+    node = otherNode(graph.edges[ei]!, node);
+    const next = deckAt(node, ei);
+    if (next < 0) break;
+    ei = next;
+  }
+  return chain;
+}
 
-    // Walk to one end of the chain, then collect it in order.
-    let startEdge = seed;
-    let startNode = graph.edges[seed]!.a;
-    for (;;) {
-      const prev = deckAt(startNode, startEdge);
-      if (prev < 0) break;
-      startEdge = prev;
-      startNode = otherNode(graph.edges[prev]!, startNode);
+/**
+ * Reshape a chain's edges into a trapezoid: ground elevation at the chain
+ * ends, linear ramps over 40 % of the length on each side, flat at `crest`
+ * in the middle. A flat plateau at deck height mismatched the real profile
+ * of Älvsborgsbron (climb, short crest, descent) so badly that the scorer
+ * rejected the real race route.
+ */
+function applyTrapezoid(graph: Graph, chain: ChainLink[], crest: number): void {
+  const chainLen = chain.reduce((sum, c) => sum + graph.edges[c.ei]!.lengthM, 0);
+  const rampLen = chainLen * CHAIN_RAMP_FRACTION;
+  // Ground at the ends comes from the DEM's value there (quay/street level).
+  const first = graph.edges[chain[0]!.ei]!;
+  const last = graph.edges[chain[chain.length - 1]!.ei]!;
+  const groundA = Math.min(
+    crest,
+    chain[0]!.fromNode === first.a ? first.elev![0]! : first.elev![first.elev!.length - 1]!,
+  );
+  const endNodeIsA = otherNode(last, chain[chain.length - 1]!.fromNode) === last.a;
+  const groundB = Math.min(crest, endNodeIsA ? last.elev![0]! : last.elev![last.elev!.length - 1]!);
+
+  const profileAt = (d: number): number => {
+    if (d < rampLen) return groundA + ((crest - groundA) * d) / rampLen;
+    if (d > chainLen - rampLen) return groundB + ((crest - groundB) * (chainLen - d)) / rampLen;
+    return crest;
+  };
+
+  let offset = 0;
+  for (const { ei: edgeIdx, fromNode } of chain) {
+    const e = graph.edges[edgeIdx]!;
+    const count = e.elev!.length;
+    const spacing = e.lengthM / (count - 1);
+    const out = new Float32Array(count);
+    const forward = fromNode === e.a;
+    for (let i = 0; i < count; i++) {
+      const dAlong = offset + i * spacing;
+      out[forward ? i : count - 1 - i] = profileAt(dAlong);
     }
-    const chain: { ei: number; fromNode: number }[] = [];
-    let node = startNode;
-    let ei = startEdge;
-    for (;;) {
-      chain.push({ ei, fromNode: node });
-      assigned.add(ei);
-      node = otherNode(graph.edges[ei]!, node);
-      const next = deckAt(node, ei);
-      if (next < 0) break;
-      ei = next;
-    }
-
-    const chainLen = chain.reduce((sum, c) => sum + graph.edges[c.ei]!.lengthM, 0);
-    const rampLen = chainLen * CHAIN_RAMP_FRACTION;
-    const crest = Math.max(...chain.map((c) => graph.edges[c.ei]!.eleTag!));
-    // Ground at the ends comes from the DEM's value there (quay/street level).
-    const first = graph.edges[chain[0]!.ei]!;
-    const last = graph.edges[chain[chain.length - 1]!.ei]!;
-    const groundA = Math.min(
-      crest,
-      chain[0]!.fromNode === first.a ? first.elev![0]! : first.elev![first.elev!.length - 1]!,
-    );
-    const endNodeIsA = otherNode(last, chain[chain.length - 1]!.fromNode) === last.a;
-    const groundB = Math.min(
-      crest,
-      endNodeIsA ? last.elev![0]! : last.elev![last.elev!.length - 1]!,
-    );
-
-    const profileAt = (d: number): number => {
-      if (d < rampLen) return groundA + ((crest - groundA) * d) / rampLen;
-      if (d > chainLen - rampLen) return groundB + ((crest - groundB) * (chainLen - d)) / rampLen;
-      return crest;
-    };
-
-    let offset = 0;
-    for (const { ei: edgeIdx, fromNode } of chain) {
-      const e = graph.edges[edgeIdx]!;
-      const count = e.elev!.length;
-      const spacing = e.lengthM / (count - 1);
-      const out = new Float32Array(count);
-      const forward = fromNode === e.a;
-      for (let i = 0; i < count; i++) {
-        const dAlong = offset + i * spacing;
-        out[forward ? i : count - 1 - i] = profileAt(dAlong);
-      }
-      e.elev = out;
-      offset += e.lengthM;
-    }
+    e.elev = out;
+    offset += e.lengthM;
   }
 }
 
-export async function sampleEdgeElevations(graph: Graph, sampler: TerrainSampler): Promise<void> {
+/**
+ * Model each chain of connected ele-tagged bridge edges as a ground-crest-
+ * ground trapezoid (see `applyTrapezoid`). With `estimateBridgeHeight`, a
+ * second pass does the same for bridges OSM has not tagged with `ele` — most
+ * of them: Hisingsbron and Marieholmsbron carry `bridge=yes` and nothing
+ * else, so without this they score as flat, level with the shore, no matter
+ * how high they really run. The guessed crest is a crude ~3 % average grade
+ * over the chain's length, clamped to a plausible deck height (3–25 m) —
+ * opt-in and off by default, because it is a geometric guess standing in for
+ * real data, not a correction to it.
+ */
+export function shapeBridgeChains(graph: Graph, estimateBridgeHeight = false): void {
+  const assigned = new Set<number>();
+  const isTaggedDeck = (e: GraphEdge) => e.levelled && e.eleTag !== null && e.elev !== null;
+
+  for (let seed = 0; seed < graph.edges.length; seed++) {
+    if (assigned.has(seed) || !isTaggedDeck(graph.edges[seed]!)) continue;
+    const chain = collectChain(graph, seed, isTaggedDeck, assigned);
+    const crest = Math.max(...chain.map((c) => graph.edges[c.ei]!.eleTag!));
+    applyTrapezoid(graph, chain, crest);
+  }
+
+  if (!estimateBridgeHeight) return;
+
+  // Deliberately isBridge, not levelled: a tunnel passing under a hill has
+  // no "rise" to guess, and inventing one would be actively wrong.
+  const isUntaggedBridgeDeck = (e: GraphEdge) => e.isBridge && e.eleTag === null && e.elev !== null;
+
+  for (let seed = 0; seed < graph.edges.length; seed++) {
+    if (assigned.has(seed) || !isUntaggedBridgeDeck(graph.edges[seed]!)) continue;
+    const chain = collectChain(graph, seed, isUntaggedBridgeDeck, assigned);
+    const chainLen = chain.reduce((sum, c) => sum + graph.edges[c.ei]!.lengthM, 0);
+    if (chainLen < MIN_ESTIMATE_CHAIN_M) continue; // left as sampled: flat, honest
+    const first = graph.edges[chain[0]!.ei]!;
+    const groundGuess =
+      chain[0]!.fromNode === first.a ? first.elev![0]! : first.elev![first.elev!.length - 1]!;
+    const rise = Math.min(
+      MAX_ESTIMATED_RISE_M,
+      Math.max(MIN_ESTIMATED_RISE_M, chainLen * ESTIMATE_RISE_FRACTION),
+    );
+    applyTrapezoid(graph, chain, groundGuess + rise);
+  }
+}
+
+export interface SampleElevationsOptions {
+  /** Guess a rise for bridges OSM has not tagged with ele. Default off. */
+  estimateBridgeHeight?: boolean;
+}
+
+export async function sampleEdgeElevations(
+  graph: Graph,
+  sampler: TerrainSampler,
+  options: SampleElevationsOptions = {},
+): Promise<void> {
   const pending: { edge: GraphEdge; count: number }[] = [];
   let total = 0;
   for (const edge of graph.edges) {
@@ -831,5 +897,5 @@ export async function sampleEdgeElevations(graph: Graph, sampler: TerrainSampler
     offset += count;
   }
 
-  shapeBridgeChains(graph);
+  shapeBridgeChains(graph, options.estimateBridgeHeight);
 }

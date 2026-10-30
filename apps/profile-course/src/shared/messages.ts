@@ -37,12 +37,14 @@ export interface CoursePathRef {
   edges: number[];
   /** 1 = traversed a→b, 0 = b→a. */
   dirs: number[];
-  /** The four ensurePrepared arguments, plus the size of what they built. */
+  /** The five ensurePrepared arguments, plus the size of what they built. */
   graph: {
     start: LatLon;
     radiusMeters: number;
     targetLengthMeters: number;
     connectors: boolean;
+    /** Guess a rise for untagged bridges (experimental, default off). */
+    estimateBridgeHeight: boolean;
     /** Fingerprint: a rebuild of a different size is not this graph. */
     edgeCount: number;
     nodeCount: number;
@@ -120,6 +122,8 @@ export type MainToWorker =
       weights: Record<string, number> | null;
       /** Synthesize informal street crossings (experimental, slower). */
       connectors: boolean;
+      /** Guess a rise for untagged bridges (experimental, default off). */
+      estimateBridgeHeight: boolean;
       /** Beam width (search effort); default 200. */
       beamWidth: number;
       /** Must-pass points, in order; each with an optional km. */
@@ -135,6 +139,7 @@ export type MainToWorker =
       target: TargetTransfer;
       desiredMix: [number, number, number, number] | null;
       weights: Record<string, number> | null;
+      estimateBridgeHeight: boolean;
     }
   | {
       /** Reroute the current course so it passes through `to` near `atKm`. */

@@ -154,11 +154,12 @@ function prepareKey(
   radiusMeters: number,
   targetLengthMeters: number,
   connectors: boolean,
+  estimateBridgeHeight: boolean,
 ): string {
   // The radius is only the start/finish zone. A course of length L can reach
   // about L/2 out before it has to head back.
   const graphRadius = Math.min(radiusMeters + targetLengthMeters / 2, MAX_GRAPH_RADIUS_M);
-  return `${start.lat.toFixed(5)},${start.lon.toFixed(5)},${Math.round(radiusMeters)},${Math.round(graphRadius)},${connectors ? 'c' : ''}`;
+  return `${start.lat.toFixed(5)},${start.lon.toFixed(5)},${Math.round(radiusMeters)},${Math.round(graphRadius)},${connectors ? 'c' : ''},${estimateBridgeHeight ? 'e' : ''}`;
 }
 
 async function ensurePrepared(
@@ -166,9 +167,10 @@ async function ensurePrepared(
   radiusMeters: number,
   targetLengthMeters: number,
   connectors = false,
+  estimateBridgeHeight = false,
 ): Promise<void> {
   const graphRadius = Math.min(radiusMeters + targetLengthMeters / 2, MAX_GRAPH_RADIUS_M);
-  const key = prepareKey(start, radiusMeters, targetLengthMeters, connectors);
+  const key = prepareKey(start, radiusMeters, targetLengthMeters, connectors, estimateBridgeHeight);
   if (graph && preparedKey === key) return;
 
   post({ type: 'progress', stage: 'fetching network', fraction: 0.05, bestScore: null });
@@ -212,7 +214,7 @@ async function ensurePrepared(
   }
 
   post({ type: 'progress', stage: 'sampling elevation', fraction: 0.25, bestScore: null });
-  await sampleEdgeElevations(graph, sampler);
+  await sampleEdgeElevations(graph, sampler, { estimateBridgeHeight });
   // Coverage rides along with every graph whether or not the user has asked
   // for it; what the checkbox turns on is the weight, which costs nothing when
   // it is zero. The cells are only known after the elevation pass, which is
@@ -224,6 +226,7 @@ async function ensurePrepared(
     radiusMeters,
     targetLengthMeters,
     connectors,
+    estimateBridgeHeight,
     edgeCount: graph.edges.length,
     nodeCount: graph.nodeLat.length,
   };
@@ -304,6 +307,7 @@ interface SearchOptionsIn {
   startAtPoint: boolean;
   weights: Record<string, number> | null;
   connectors: boolean;
+  estimateBridgeHeight: boolean;
   beamWidth: number;
   viaPoints: ViaPoint[];
   viaToleranceKm: number;
@@ -419,7 +423,13 @@ async function search(
 ): Promise<void> {
   const stale = (): boolean => cancelled || gen !== searchGen;
   const t0 = performance.now();
-  await ensurePrepared(start, radiusMeters, targetLengthMeters, opts.connectors);
+  await ensurePrepared(
+    start,
+    radiusMeters,
+    targetLengthMeters,
+    opts.connectors,
+    opts.estimateBridgeHeight,
+  );
   if (stale()) return;
   // Locals, not the module state: a newer search's ensurePrepared may replace
   // graph/startNode/validEnd under this one before it next checks stale().
@@ -645,6 +655,7 @@ async function matchCourse(
   target: TargetTransfer,
   desiredMix: [number, number, number, number] | null,
   weightsIn: Record<string, number> | null,
+  estimateBridgeHeight: boolean,
 ): Promise<void> {
   // Graph area from the course's own bounding box.
   let minLat = Infinity,
@@ -661,7 +672,7 @@ async function matchCourse(
   const halfDiag = haversineMeters(minLat, minLon, maxLat, maxLon) / 2 + 500;
   // Matching follows the user's own route, which may well cross streets
   // informally — always build this graph with connectors enabled.
-  await ensurePrepared(center, Math.min(halfDiag, MAX_GRAPH_RADIUS_M), 0, true);
+  await ensurePrepared(center, Math.min(halfDiag, MAX_GRAPH_RADIUS_M), 0, true, estimateBridgeHeight);
   const g = graph!;
 
   post({ type: 'progress', stage: 'matching course', fraction: 0.8, bestScore: null });
@@ -687,7 +698,8 @@ function refGraphInHand(ref: CoursePathRef): boolean {
   const r = ref.graph;
   return (
     graph !== null &&
-    preparedKey === prepareKey(r.start, r.radiusMeters, r.targetLengthMeters, r.connectors) &&
+    preparedKey ===
+      prepareKey(r.start, r.radiusMeters, r.targetLengthMeters, r.connectors, r.estimateBridgeHeight) &&
     graph.edges.length === r.edgeCount &&
     graph.nodeLat.length === r.nodeCount
   );
@@ -713,7 +725,13 @@ async function ensureCurrentPath(
     if (!refGraphInHand(ref)) {
       const r = ref.graph;
       try {
-        await ensurePrepared(r.start, r.radiusMeters, r.targetLengthMeters, r.connectors);
+        await ensurePrepared(
+          r.start,
+          r.radiusMeters,
+          r.targetLengthMeters,
+          r.connectors,
+          r.estimateBridgeHeight,
+        );
       } catch {
         // Offline, or Overpass is down. Matching against whatever graph we have
         // beats refusing the edit outright; with no graph at all, fall through.
@@ -934,6 +952,7 @@ onmessage = (event: MessageEvent<MainToWorker>) => {
           startAtPoint: msg.startAtPoint,
           weights: msg.weights,
           connectors: msg.connectors,
+          estimateBridgeHeight: msg.estimateBridgeHeight,
           beamWidth: msg.beamWidth,
           viaPoints: msg.viaPoints,
           viaToleranceKm: msg.viaToleranceKm,
@@ -976,9 +995,14 @@ onmessage = (event: MessageEvent<MainToWorker>) => {
         .catch((err: unknown) => post({ type: 'error', message: String(err) }));
       break;
     case 'matchCourse':
-      matchCourse(msg.lats, msg.lons, msg.target, msg.desiredMix, msg.weights).catch(
-        (err: unknown) => post({ type: 'error', message: errText(err) }),
-      );
+      matchCourse(
+        msg.lats,
+        msg.lons,
+        msg.target,
+        msg.desiredMix,
+        msg.weights,
+        msg.estimateBridgeHeight,
+      ).catch((err: unknown) => post({ type: 'error', message: errText(err) }));
       break;
     case 'editCourse':
       editCourse(
