@@ -409,7 +409,7 @@ function persistSession(): void {
       returnToStart: returnToggle.checked,
       startAnywhere: startAnywhereToggle.checked,
       useTraces: useTraces.checked,
-      beamWidth: Number(beamWidthInput.value) || 200,
+      beamWidth: Number(beamWidthInput.value) || 400,
       circularity: Number(
         (document.getElementById('w-circularity') as HTMLInputElement).value,
       ) || 0,
@@ -1138,7 +1138,7 @@ function writeUrlState(): void {
   if (rangeTo.value) parts.push(`to=${rangeTo.value}`);
   put('mix', surfaceSelect.value, 'road');
   put('seed', String(seed), '1');
-  put('b', String(Number(beamWidthInput.value) || 200), beamWidthInput.defaultValue);
+  put('b', String(Number(beamWidthInput.value) || 400), beamWidthInput.defaultValue);
   put('rts', returnToggle.checked ? '1' : '0', '0');
   put('sa', startAnywhereToggle.checked ? '1' : '0', '0');
   put('conn', connectorsToggle.checked ? '1' : '0', '0');
@@ -1181,7 +1181,7 @@ function writeUrlState(): void {
     connectors: connectorsToggle.checked,
     useTraces: useTraces.checked,
     seed,
-    beamWidth: Number(beamWidthInput.value) || 200,
+    beamWidth: Number(beamWidthInput.value) || 400,
     viaToleranceKm: Number(viaToleranceInput.value) || 0.3,
     weights: weightDiffs,
     vias: viaPoints,
@@ -1230,7 +1230,7 @@ function startSearch(): void {
     startAtPoint: !startAnywhereToggle.checked || returnToggle.checked,
     weights: collectWeights(),
     connectors: connectorsToggle.checked,
-    beamWidth: Number(beamWidthInput.value) || 200,
+    beamWidth: Number(beamWidthInput.value) || 400,
     viaPoints,
     viaToleranceKm: Number(viaToleranceInput.value) || 0.3,
   });

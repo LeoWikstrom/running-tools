@@ -73,7 +73,7 @@ where the terrain has no matching climb the course now under-delivers the race's
 than faking it.
 
 - Phase 2 baseline: 2 000 seeded random walks, keep best 20, local improvement.
-- Phase 3: beam search over `(node, 100 m bucket)` states, B = 200/bucket, Dijkstra pruning on
+- Phase 3: beam search over `(node, 100 m bucket)` states, B = 400/bucket (the UI default; 50–800), Dijkstra pruning on
   reachability, k-shortest-paths window replacement (300–1 500 m, k = 5, two passes).
   B is a floor: start-anywhere subsamples the zone to at most 120 roots and widens the beam to
   16 states per root (capped at 10 × the asked-for effort), because one shared beam left each

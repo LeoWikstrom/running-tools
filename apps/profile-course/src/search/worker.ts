@@ -539,7 +539,7 @@ async function search(
           })
         : await beamSearch(g, gStart, profile, targetLengthMeters, {
             seed: seed + run * 101,
-            beamWidth: Math.max(50, Math.min(800, opts.beamWidth || 200)),
+            beamWidth: Math.max(50, Math.min(800, opts.beamWidth || 400)),
             vias,
             viaSlackM: Math.max(100, (opts.viaToleranceKm || 1) * 1000),
             desiredMix: opts.desiredMix,
