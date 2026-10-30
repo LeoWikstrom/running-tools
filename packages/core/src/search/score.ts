@@ -3,6 +3,7 @@ import {
   gainLoss,
   gradientHistogram,
   movingMedian5,
+  resampleElevation,
   type TargetProfile,
 } from '../gpx/profile';
 import { TURN_ANGLE_DEG, angleDiffDeg } from '../geo';
@@ -161,6 +162,12 @@ export function assembleCourse(graph: Graph, path: CoursePath): AssembledCourse 
   }
 
   const samples = new Float32Array(sampleCount);
+  /** True course distance of each raw sample — edge samples are spaced
+      lengthM/(n−1) apart, anywhere from a few metres to ~50, so the raw
+      index is NOT distance/25. Everything downstream (the target
+      comparison, the chart, the hover) speaks exact 25 m, so the raw
+      stream is resampled onto that grid below. */
+  const sampleDist = new Float64Array(sampleCount);
   const surfaceLen: SurfaceMix = [0, 0, 0, 0];
   let penaltyLen = 0;
   let repeatLen = 0;
@@ -195,7 +202,9 @@ export function assembleCourse(graph: Graph, path: CoursePath): AssembledCourse 
     if (!elev) throw new Error('assembleCourse requires sampled edge elevations');
     const forward = path.dirs[i] === 1;
     const n = elev.length;
+    const spacing = e.lengthM / Math.max(1, n - 1);
     for (let k = first ? 0 : 1; k < n; k++) {
+      sampleDist[w] = distSoFar + k * spacing;
       samples[w++] = elev[forward ? k : n - 1 - k]!;
     }
     first = false;
@@ -275,11 +284,16 @@ export function assembleCourse(graph: Graph, path: CoursePath): AssembledCourse 
     used.set(ei, { dir, endDist: distSoFar + e.lengthM });
   }
 
+  // Onto the exact 25 m grid the target lives on. Without this, stretches of
+  // short edges packed samples densely and the index-as-distance reading
+  // stretched the profile — the same ground could plot (and score!) at two
+  // different heights, and the search learned to exploit the drift.
+  const uniform = resampleElevation(sampleDist, samples, lengthM);
   // Same median filter as the target profile: kills single-sample DEM spikes
   // that survive per-edge smoothing (short edges, edge joints).
-  const smoothed = movingMedian5(samples);
+  const smoothed = movingMedian5(uniform);
   const start = smoothed[0] ?? 0;
-  for (let i = 0; i < w; i++) smoothed[i]! -= start;
+  for (let i = 0; i < smoothed.length; i++) smoothed[i]! -= start;
 
   const { gain, loss } = gainLoss(smoothed);
   const split = surfaceLen.map((v) => (lengthM > 0 ? v / lengthM : 0)) as SurfaceMix;

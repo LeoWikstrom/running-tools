@@ -430,7 +430,18 @@ export async function beamSearch(
     const path = reconstruct(s, stateIdx);
     if (path.edges.length === 0) return;
     const course = assembleCourse(graph, path);
-    const score = scoreCourse(course, target, desiredMix, weights);
+    let score = scoreCourse(course, target, desiredMix, weights);
+    // The avoid nudge lives in the beam's internal rank; without charging it
+    // here too, an avoided course that still completes wins the final pick
+    // untaxed — and the alternative run hands back the course it was told
+    // to steer away from.
+    if (avoidEdges && avoidEdges.size > 0) {
+      let avoidLen = 0;
+      for (const ei of path.edges) {
+        if (avoidEdges.has(ei)) avoidLen += graph.edges[ei]!.lengthM;
+      }
+      score += weights.penalty * AVOID_PENALTY * (avoidLen / Math.max(1, course.lengthM));
+    }
     if (best.length < keepBest || score < best[best.length - 1]!.score) {
       best.push({ path, course, score });
       best.sort((x, y) => x.score - y.score);
