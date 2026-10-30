@@ -1555,12 +1555,20 @@ void (async () => {
   try {
     applyTour(validateTour(saved));
     setStatus(`Tour “${saved.name}” restored from the last session.`);
-    // setCourse fitted the map against the still-settling sheet. Fit again
-    // once layout is done — to the whole screen, not the above-sheet strip:
-    // as zoomed in as keeping the entire course in view allows.
-    window.setTimeout(() => {
-      if (courseLine) map.fitBounds(courseLine.getBounds(), { padding: L.point(32, 32) });
-    }, 400);
+    // setCourse fitted the map against the still-settling sheet. Fit again —
+    // into the upper half of the screen (the sheet owns the lower), without
+    // animation so nothing in flight can override it, and once more later in
+    // case startup layout work landed after the first.
+    const fitRestoredCourse = (): void => {
+      if (!courseLine) return;
+      map.fitBounds(courseLine.getBounds(), {
+        paddingTopLeft: L.point(32, 32),
+        paddingBottomRight: L.point(32, Math.round(window.innerHeight / 2)),
+        animate: false,
+      });
+    };
+    window.setTimeout(fitRestoredCourse, 400);
+    window.setTimeout(fitRestoredCourse, 1400);
   } catch {
     // A stale or half-written session is silently dropped.
   }
