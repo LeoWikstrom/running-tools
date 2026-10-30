@@ -11,6 +11,7 @@ import {
 import type { Graph } from '../src/graph/types';
 import type { OverpassResponse } from '../src/net/overpass';
 import { beamSearch } from '../src/search/beam';
+import { DEFAULT_WEIGHTS } from '../src/search/score';
 import { improveCandidates, sameRunAs } from '../src/search/improve';
 import { randomWalkSearch, type WalkCandidate } from '../src/search/randomWalk';
 import { FixtureSampler } from './helpers/fixtureSampler';
@@ -46,6 +47,17 @@ describe('beamSearch on the Skatås fixture', () => {
       expect(c.course.lengthM).toBeGreaterThanOrEqual(970);
       expect(c.course.lengthM).toBeLessThanOrEqual(1030);
     }
+  });
+
+  it('circularity 0 is bit-identical to the weight being absent', async () => {
+    const target = flatTarget(1000);
+    const plain = await beamSearch(graph, startNode, target, 1000, { seed: 1 });
+    const zeroed = await beamSearch(graph, startNode, target, 1000, {
+      seed: 1,
+      weights: { ...DEFAULT_WEIGHTS, circularity: 0 },
+    });
+    expect(zeroed.map((c) => c.path.edges)).toEqual(plain.map((c) => c.path.edges));
+    expect(zeroed[0]!.score).toBe(plain[0]!.score);
   });
 
   it('the beam pipeline beats or matches the baseline on an achievable target', async () => {

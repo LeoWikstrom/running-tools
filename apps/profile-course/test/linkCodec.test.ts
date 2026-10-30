@@ -47,6 +47,7 @@ describe('link codec', () => {
         { name: 'localShape', value: 0 },
         { name: 'penalty', value: 40 },
         { name: 'untracked', value: 7.5 },
+        { name: 'circularity', value: 3.5 },
       ],
       vias: [
         { lat: -33.87001, lon: 151.21002, km: 5.2 },

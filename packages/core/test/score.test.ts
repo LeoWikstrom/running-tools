@@ -5,6 +5,7 @@ import {
   MIX_ROAD,
   assembleCourse,
   emd,
+  scoreBreakdown,
   scoreCourse,
   surfaceMismatch,
   type AssembledCourse,
@@ -40,6 +41,8 @@ function courseFrom(samples: Float32Array, reachRatio = 0.5): AssembledCourse {
     turnsPerKm: 0,
     denseTurnsPerKm: 0,
     signalsPerKm: 0,
+    headingDegSum: 0,
+    crossingsPerKm: 0,
   };
 }
 
@@ -261,5 +264,40 @@ describe('corridor repeat window boundary', () => {
     const course = assembleCourse(graph, path);
     expect(course.repeatFraction).toBeGreaterThan(0);
     expect(course.oscillationFraction).toBe(0);
+  });
+});
+
+describe('circularity', () => {
+  const target = buildProfileFromSamples(triangle(801, 100), 800 * 25);
+
+  it('weight 0 (or absent) leaves scores and the breakdown untouched', () => {
+    const course = { ...courseFrom(triangle(801, 100)), headingDegSum: 900, crossingsPerKm: 2 };
+    const base = scoreCourse(course, target);
+    expect(scoreCourse(course, target, MIX_ROAD, { ...DEFAULT_WEIGHTS, circularity: 0 })).toBe(
+      base,
+    );
+    expect(scoreBreakdown(course, target)).not.toHaveProperty('circularity');
+  });
+
+  it('charges heading beyond one rotation plus crossings when weighted', () => {
+    const km = 20;
+    const clean = { ...courseFrom(triangle(801, 100)), headingDegSum: 360, crossingsPerKm: 0 };
+    const twisty = { ...courseFrom(triangle(801, 100)), headingDegSum: 360 + 720 * km };
+    const crossing = { ...courseFrom(triangle(801, 100)), crossingsPerKm: 1 };
+    const w = { ...DEFAULT_WEIGHTS, circularity: 5 };
+    expect(scoreBreakdown(clean, target, MIX_ROAD, w)['circularity']).toBeCloseTo(0, 6);
+    expect(scoreBreakdown(twisty, target, MIX_ROAD, w)['circularity']).toBeCloseTo(
+      5 * ((720 * km) / 360 / km),
+      5,
+    );
+    expect(scoreBreakdown(crossing, target, MIX_ROAD, w)['circularity']).toBeCloseTo(5, 6);
+  });
+
+  it('assembleCourse counts junction heading and crossings, loop closing free', () => {
+    const { graph, path } = corridorGraph(850);
+    const course = assembleCourse(graph, path);
+    // The straight synthetic chain has no finite headings and no revisits.
+    expect(course.headingDegSum).toBe(0);
+    expect(course.crossingsPerKm).toBe(0);
   });
 });

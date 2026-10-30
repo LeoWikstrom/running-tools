@@ -83,6 +83,7 @@ const WEIGHT_FIELDS = [
   'penalty',
   'oscillation',
   'trafficLights',
+  'circularity',
 ];
 
 function collectWeights(): Record<string, number> | null {
@@ -409,6 +410,9 @@ function persistSession(): void {
       startAnywhere: startAnywhereToggle.checked,
       useTraces: useTraces.checked,
       beamWidth: Number(beamWidthInput.value) || 200,
+      circularity: Number(
+        (document.getElementById('w-circularity') as HTMLInputElement).value,
+      ) || 0,
       viaPoints,
       seed,
     },
@@ -2125,6 +2129,11 @@ async function boot(): Promise<void> {
     useTraces.checked = session.settings.useTraces ?? false;
     reflectUseTraces();
     if (session.settings.beamWidth) beamWidthInput.value = String(session.settings.beamWidth);
+    if (session.settings.circularity) {
+      const v = String(session.settings.circularity);
+      (document.getElementById('w-circularity') as HTMLInputElement).value = v;
+      (document.getElementById('ws-circularity') as HTMLInputElement).value = v;
+    }
     viaPoints = session.settings.viaPoints ?? [];
     renderVias();
     if (session.profile) setFullProfile(session.profile);

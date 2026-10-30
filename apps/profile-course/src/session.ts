@@ -15,6 +15,9 @@ export interface SessionSettings {
   useTraces?: boolean;
   /** Search effort (beam width), which is a per-machine taste, not per course. */
   beamWidth?: number;
+  /** The circularity weight, a running-taste like beam width — the other
+      weights travel in the share hash only. */
+  circularity?: number;
   viaPoints?: { lat: number; lon: number; km: number | null }[];
   seed: number;
 }

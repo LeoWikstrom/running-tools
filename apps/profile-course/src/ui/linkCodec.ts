@@ -38,6 +38,7 @@ const WEIGHT_ORDER = [
   'oscillation',
   'trafficLights',
   'untracked',
+  'circularity',
 ];
 const VERSION = 1;
 const HEAD = 26;

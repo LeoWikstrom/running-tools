@@ -22,6 +22,14 @@ export const WEIGHT_INFO: Record<string, { name: string; text: string }> = {
       'hills, and elevation data is noisy enough that chasing them too hard distorts ' +
       'the course.',
   },
+  circularity: {
+    name: 'Circularity',
+    text:
+      'Rounder loops: charges heading change beyond the one full rotation a loop needs, ' +
+      'and every crossing of the course\u2019s own path. At 0 (the default) it is off and ' +
+      'courses come out exactly as before; higher values straighten zigzags and unpick ' +
+      'figure-eights at the cost of some profile match.',
+  },
   turns: {
     name: 'Turns',
     text:

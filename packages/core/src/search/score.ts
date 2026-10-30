@@ -50,6 +50,12 @@ export interface Weights {
    * indistinguishable from ground nobody runs.
    */
   untracked: number;
+  /**
+   * Rounder loops: charges heading change beyond the one full rotation a
+   * loop needs, plus every crossing of the course's own path. 0 by default —
+   * the term is skipped entirely, scores stay bit-identical.
+   */
+  circularity: number;
 }
 
 // Local similarity (rmse, localShape) outweighs the global gain/loss match —
@@ -71,6 +77,7 @@ export const DEFAULT_WEIGHTS: Weights = {
   trafficLights: 0,
   localShape: 9,
   untracked: 0,
+  circularity: 0,
 };
 
 export const OSCILLATION_WINDOW_M = 1000;
@@ -138,6 +145,10 @@ export interface AssembledCourse {
   turnsPerKm: number;
   denseTurnsPerKm: number;
   signalsPerKm: number;
+  /** Sum of junction heading changes along the course, degrees. */
+  headingDegSum: number;
+  /** Times the course meets a node it has already visited, per km. */
+  crossingsPerKm: number;
 }
 
 export function assembleCourse(graph: Graph, path: CoursePath): AssembledCourse {
@@ -169,6 +180,9 @@ export function assembleCourse(graph: Graph, path: CoursePath): AssembledCourse 
   let prevExitHead = Number.NaN;
   let distSoFar = 0;
   let signalCount = 0;
+  let headingDegSum = 0;
+  let crossings = 0;
+  const visitedNodes = new Set<number>([root]);
   /** Corridor cell -> last pass {heading, course distance, edge}. */
   const corridor = new Map<number, { head: number; dist: number; edge: number }>();
 
@@ -187,12 +201,10 @@ export function assembleCourse(graph: Graph, path: CoursePath): AssembledCourse 
     first = false;
 
     const entry = entryHeading(e, forward);
-    if (
-      Number.isFinite(prevExitHead) &&
-      Number.isFinite(entry) &&
-      Math.abs(angleDiffDeg(prevExitHead, entry)) > TURN_ANGLE_DEG
-    ) {
-      turnDists.push(distSoFar);
+    if (Number.isFinite(prevExitHead) && Number.isFinite(entry)) {
+      const turn = Math.abs(angleDiffDeg(prevExitHead, entry));
+      headingDegSum += turn;
+      if (turn > TURN_ANGLE_DEG) turnDists.push(distSoFar);
     }
     const t = e.turnOffsets;
     for (let k = 0; k < t.length; k++) {
@@ -210,6 +222,14 @@ export function assembleCourse(graph: Graph, path: CoursePath): AssembledCourse 
     const dy = (graph.nodeLat[far]! - lat0) * 111_320;
     const dx = (graph.nodeLon[far]! - lon0) * mPerLon;
     if (dx * dx + dy * dy > reachSq) reachSq = dx * dx + dy * dy;
+
+    // Meeting a node already visited crosses the course's own path — except
+    // the last edge, which is allowed to close a loop for free.
+    if (visitedNodes.has(far)) {
+      if (i < path.edges.length - 1) crossings++;
+    } else {
+      visitedNodes.add(far);
+    }
 
     // Corridor check: covering ground a second time counts even when the path
     // is a different one — a twin bike/foot path alongside, or the next aisle
@@ -282,6 +302,8 @@ export function assembleCourse(graph: Graph, path: CoursePath): AssembledCourse 
     turnsPerKm: turnDists.length / km,
     denseTurnsPerKm: denseTurns / km,
     signalsPerKm: signalCount / km,
+    headingDegSum,
+    crossingsPerKm: crossings / km,
   };
 }
 
@@ -410,7 +432,7 @@ export function scoreBreakdown(
   const courseHist = gradientHistogram(course.samples);
   const histErr = emd(courseHist, target.gradientHistogram);
 
-  return {
+  const breakdown: Record<string, number> = {
     profile: weights.rmse * rmse,
     'gain/loss': weights.gainLoss * gainLossErr,
     gradients: weights.histogram * histErr,
@@ -425,6 +447,14 @@ export function scoreBreakdown(
     'local shape': weights.localShape * windowShapeError(course.samples, target.samples),
     'unrun ground': weights.untracked * course.untrackedFraction,
   };
+  // Guarded so 0 (the default) leaves the breakdown and sums bit-identical.
+  if (weights.circularity > 0) {
+    const km = Math.max(0.001, course.lengthM / 1000);
+    const excessRotationsPerKm = Math.max(0, course.headingDegSum - 360) / 360 / km;
+    breakdown['circularity'] =
+      weights.circularity * (excessRotationsPerKm + course.crossingsPerKm);
+  }
+  return breakdown;
 }
 
 export function scoreCourse(
