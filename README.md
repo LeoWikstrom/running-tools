@@ -24,7 +24,7 @@ npm test
 npm run lint
 npm run dev -w runtour          # or -w profile-course
 android/runtour/build.sh        # signed APK (SKIP_WEB=1 to skip the web build)
-android/runtour/release.sh      # build + publish APK as a GitHub Release
+android/runtour/release.sh      # build + publish all three APKs as one GitHub Release
 ```
 
 ## First-push checklist
@@ -32,5 +32,5 @@ android/runtour/release.sh      # build + publish APK as a GitHub Release
 1. `gh repo create LeoWikstrom/running-tools --public --source . --push`
 2. Repo Settings → Pages → Build and deployment → Source: **GitHub Actions**
    (or `gh api repos/LeoWikstrom/running-tools/pages -X POST -f build_type=workflow`).
-3. `android/runtour/release.sh` to publish the first APK.
+3. `android/runtour/release.sh` to publish the first APKs (runtour, bustour, racetwin).
 4. Archive the old `LeoWikstrom/profile-course` repo with a README pointing here.

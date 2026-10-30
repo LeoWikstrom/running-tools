@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive: the launcher masks its own shape out of background+foreground,
+     so the art reaches every edge — no letterboxing, no border. The foreground
+     is the supplied full-bleed artwork centred in the 72/108 visible window
+     over a background of the artwork's own colour. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_bg" />
+    <foreground android:drawable="@drawable/ic_launcher_fg" />
+</adaptive-icon>
