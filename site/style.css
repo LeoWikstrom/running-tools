@@ -8,20 +8,39 @@
   --panel-bg: light-dark(#ffffff, #26282c);
   --edge: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.14));
   --muted: light-dark(rgb(0 0 0 / 0.55), rgb(255 255 255 / 0.6));
+  /* Honeycomb tile strokes are hardcoded in the SVGs (a background-image
+     SVG can't inherit CSS), so the light/dark swap happens here. */
+  --comb-tile: url("./assets/honeycomb.svg");
 }
 
-html,
+@media (prefers-color-scheme: dark) {
+  :root {
+    --comb-tile: url("./assets/honeycomb-dark.svg");
+  }
+}
+
+/* The tile lives on html, not body: body's box only reaches as far as the
+   content, while html's background paints the whole canvas. */
+html {
+  background-color: var(--page-bg);
+  background-image: var(--comb-tile);
+}
+
 body {
   margin: 0;
-  background: var(--page-bg);
   font-family: system-ui, sans-serif;
   line-height: 1.5;
 }
 
 main {
-  max-width: 40rem;
+  /* Three cards + two gaps + the side padding. */
+  max-width: calc(3 * 37.5rem + 2 * 1.25rem + 2.5rem);
   margin: 0 auto;
   padding: 2.5rem 1.25rem 3rem;
+}
+
+header {
+  text-align: center;
 }
 
 header h1 {
@@ -39,11 +58,17 @@ header p {
   list-style: none;
   margin: 2rem 0 0;
   padding: 0;
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 1.25rem;
 }
 
 .app {
+  width: 37.5rem;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
   background: var(--panel-bg);
   border: 1px solid var(--edge);
   border-top: 4px solid var(--app-accent);
@@ -54,6 +79,74 @@ header p {
 .app h2 {
   margin: 0;
   font-size: 1.25rem;
+}
+
+.app-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0.9rem 0 0.2rem;
+}
+
+.app-art .map-bg {
+  fill: color-mix(in srgb, var(--app-accent) 8%, transparent);
+  stroke: var(--edge);
+}
+
+.app-art .streets {
+  stroke: var(--edge);
+  stroke-width: 1.5;
+}
+
+.app-art .grid {
+  stroke: var(--edge);
+  stroke-width: 2;
+}
+
+.app-art .race {
+  stroke: var(--muted);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-art .accent-line {
+  stroke: var(--app-accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-art .accent-line.thin {
+  stroke-width: 3;
+}
+
+.app-art .accent-fill {
+  fill: var(--app-accent);
+}
+
+.app-art .poi {
+  fill: var(--panel-bg);
+  stroke: var(--app-accent);
+  stroke-width: 3;
+}
+
+.app-art .waves {
+  stroke: #f0a434;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+
+.app-art .bus-body {
+  fill: var(--app-accent);
+}
+
+.app-art .bus-detail {
+  fill: var(--panel-bg);
+}
+
+.app-art .bus-wheel {
+  fill: var(--app-accent-deep);
 }
 
 .app h2 a {
@@ -73,6 +166,8 @@ header p {
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+  /* Cards in a row stretch to the tallest; keep the buttons on the bottom edge. */
+  margin-top: auto;
 }
 
 .button {
