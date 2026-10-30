@@ -242,19 +242,37 @@ guardSlidersAgainstScroll();
   openDialog('Manual', manualContent()),
 );
 
-// The GPS traces story is too long for the panel: a short hint sits there,
-// and the ⓘ opens the full text (kept in the HTML, hidden) as a dialog.
-{
-  const full = document.getElementById('traces-info-text') as HTMLElement;
-  const info = document.getElementById('traces-info') as HTMLButtonElement;
+/**
+ * A long explanation kept in the HTML, hidden, surfaced by its ⓘ as a dialog
+ * — for options whose full story is too long to sit inline in the panel.
+ * `inLabel`: the button sits inside the control's own `<label>` (a checkbox),
+ * so its click must not also toggle the checkbox the label wraps.
+ */
+function wireInfoButton(
+  buttonId: string,
+  textId: string,
+  title: string,
+  inLabel = false,
+): void {
+  const full = document.getElementById(textId) as HTMLElement;
+  const info = document.getElementById(buttonId) as HTMLButtonElement;
   info.title = (full.textContent ?? '').replace(/\s+/g, ' ').trim();
-  info.addEventListener('click', () => {
+  info.addEventListener('click', (e) => {
+    if (inLabel) e.preventDefault();
     const p = full.cloneNode(true) as HTMLElement;
     p.hidden = false;
     p.removeAttribute('id');
-    openDialog('GPS traces', p);
+    openDialog(title, p);
   });
 }
+wireInfoButton('traces-info', 'traces-info-text', 'GPS traces');
+wireInfoButton('connectors-info', 'connectors-info-text', 'Informal street crossings', true);
+wireInfoButton(
+  'estimate-bridge-height-info',
+  'estimate-bridge-height-info-text',
+  'Estimate height for untagged bridges',
+  true,
+);
 
 /**
  * Enter means Find course, but only where nothing else already answers it: a
