@@ -1196,6 +1196,7 @@ function startSearch(): void {
   if (!start || !profile) return;
   if (editingMode) exitEditing();
   searching = true;
+  toast('Searching for a course…');
   searchGeneration += 1;
   searchProfile = profile;
   hideResult(resultEls);
@@ -1307,6 +1308,8 @@ function renderTraces(traces: import('./shared/messages').TraceInfo[]): void {
 
 /** Set while a trace download is out, so its arrival can tick the checkbox. */
 let downloadingTraces = false;
+/** An explicit area download is running — the list arriving earns a toast. */
+let downloadingArea = false;
 
 /**
  * The latest search's generation. The worker echoes it in every search-related
@@ -1338,6 +1341,10 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
     case 'areas': {
       savedAreas = msg.areas;
       renderAreas(msg.areas);
+      if (downloadingArea || areaPromptDownload) {
+        downloadingArea = false;
+        toast('Area saved — searches here now run offline.');
+      }
       downloadAreaButton.textContent = 'Download area around start';
       downloadAreaButton.disabled = map.getStart() === null;
       areaProgress.hidden = true;
@@ -1358,6 +1365,7 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
         useTraces.checked = true;
         reflectUseTraces();
         persistSession();
+        toast('GPS traces saved — the unrun-ground weight can use them now.');
       }
       tracesDone();
       break;
@@ -1427,6 +1435,7 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
         candidatePreviews[msg.index] = null;
         // The first course to land is shown straight away; the rest wait in
         // their tabs so an arriving alternative cannot pull the map away.
+        if (msg.index === 0) toast('First course found.');
         if (msg.index === shownCandidate) {
           lastResult = candidates[msg.index]!;
           showResult(lastResult);
@@ -1513,11 +1522,14 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
       }
       // After the re-arm, which would otherwise talk over the reason with its
       // own invitation — leaving a refused edit looking like nothing happened.
-      if (editingMode) setEditStatus(msg.message);
-      else {
+      if (editingMode) {
+        setEditStatus(msg.message);
+        toast(msg.message);
+      } else {
         startHint.textContent = msg.message;
         toast(msg.message);
       }
+      downloadingArea = false;
       downloadAreaButton.textContent = 'Download area around start';
       downloadAreaButton.disabled = map.getStart() === null;
       areaProgress.hidden = true;
@@ -1535,6 +1547,8 @@ downloadAreaButton.addEventListener('click', () => {
   if (!start) return;
   downloadAreaButton.disabled = true;
   downloadAreaButton.textContent = 'Downloading…';
+  downloadingArea = true;
+  toast('Downloading the area… this can take a while.');
   send({ type: 'downloadArea', center: start, radiusMeters: Number(areaRadius.value) * 1000 });
 });
 
@@ -1542,6 +1556,7 @@ function startTracesDownload(): void {
   const start = map.getStart();
   if (!start) return;
   downloadingTraces = true;
+  toast('Downloading GPS traces… this can take minutes; Cancel stops it.');
   downloadTracesButton.disabled = true;
   downloadTracesButton.textContent = 'GPS traces: 0 %';
   // The search's Cancel stops this too — it is the same worker-side flag, and

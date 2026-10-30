@@ -11,6 +11,10 @@ export function toast(text: string, ms = 4000): void {
     el = document.createElement('div');
     el.className = 'toast';
     el.setAttribute('role', 'status');
+    el.addEventListener('click', () => {
+      clearTimeout(hideTimer);
+      el?.classList.remove('show');
+    });
     document.body.appendChild(el);
   }
   el.textContent = text;

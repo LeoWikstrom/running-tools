@@ -1,6 +1,6 @@
 {
-  "name": "Profile Course",
-  "short_name": "ProfileCourse",
+  "name": "RaceTwin",
+  "short_name": "RaceTwin",
   "description": "Generate a runnable course nearby whose elevation profile matches a race",
   "start_url": "./",
   "display": "standalone",

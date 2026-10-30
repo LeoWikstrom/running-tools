@@ -1,5 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
   <rect width="100" height="100" rx="20" fill="#c63d80"/>
-  <polyline points="10,78 28,50 40,62 58,30 72,46 90,22" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="10" cy="78" r="6" fill="#fff"/>
+  <!-- The RunTour runner, smaller, over the course's elevation profile. -->
+  <g transform="translate(25,4) scale(0.55)" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="63" cy="26" r="7" fill="#fff" stroke="none"/>
+    <path d="M61,36 L50,58 M59,41 L71,49 M59,43 L44,39 M50,58 L64,65 L62,81 M50,58 L41,71 L28,73"/>
+  </g>
+  <polyline points="10,84 22,68 32,76 46,56 58,66 70,52 79,60 90,48" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="10" cy="84" r="5" fill="#fff"/>
 </svg>
