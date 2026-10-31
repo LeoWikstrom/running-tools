@@ -34,6 +34,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.util.Locale;
 import java.util.Map;
@@ -57,6 +58,39 @@ public class MainActivity extends Activity {
      */
     private static final String HOST = "runtour.local";
     private static final String BASE = "https://" + HOST + "/index.html";
+
+    /**
+     * The page may only fetch from the services the web app itself talks to;
+     * a crafted tour.json must not turn the bridge's fetch methods into an
+     * open proxy (exfiltration, local-network probing).
+     */
+    private static final String[] ALLOWED_HOSTS = {
+            "wikipedia.org", "wikimedia.org", "wikidata.org", "openstreetmap.org",
+            "overpass-api.de", "overpass.kumi.systems", "overpass.private.coffee",
+            "maps.mail.ru",
+    };
+
+    private static boolean isAllowedUrl(String url) {
+        try {
+            URI u = new URI(url);
+            if (!"https".equals(u.getScheme())) return false;
+            if (u.getUserInfo() != null) return false;
+            String host = u.getHost();
+            if (host == null) return false;
+            host = host.toLowerCase(Locale.ROOT);
+            for (String allowed : ALLOWED_HOSTS) {
+                if (host.equals(allowed) || host.endsWith("." + allowed)) return true;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean isSafeName(String name) {
+        return name != null && !name.isEmpty()
+                && !name.contains("/") && !name.contains("\\") && !name.contains("..");
+    }
 
     private WebView web;
     private TextToSpeech tts;
@@ -432,6 +466,14 @@ public class MainActivity extends Activity {
         /** GET a URL into the tour's directory — historical pictures offline. */
         @JavascriptInterface
         public void downloadTourFile(String tourId, String filename, String url, int callbackId) {
+            if (!isAllowedUrl(url)) {
+                resolveJs(callbackId, false, "blocked url");
+                return;
+            }
+            if (!isSafeName(tourId) || !isSafeName(filename)) {
+                resolveJs(callbackId, false, "blocked filename");
+                return;
+            }
             executor.execute(() -> {
                 HttpURLConnection conn = null;
                 try {
@@ -442,6 +484,11 @@ public class MainActivity extends Activity {
                     File dir = Tours.dir(MainActivity.this, tourId);
                     dir.mkdirs();
                     File out = new File(dir, Tours.sanitize(filename));
+                    String root = Tours.root(MainActivity.this).getCanonicalPath();
+                    if (!out.getCanonicalPath().startsWith(root + File.separator)) {
+                        resolveJs(callbackId, false, "blocked filename");
+                        return;
+                    }
                     try (InputStream in = conn.getInputStream();
                             java.io.FileOutputStream file = new java.io.FileOutputStream(out)) {
                         byte[] buf = new byte[8192];
@@ -460,6 +507,10 @@ public class MainActivity extends Activity {
         /** GET a URL without the page's CORS limits (for official sites later). */
         @JavascriptInterface
         public void fetchText(String url, int callbackId) {
+            if (!isAllowedUrl(url)) {
+                resolveJs(callbackId, false, "blocked url");
+                return;
+            }
             executor.execute(() -> {
                 HttpURLConnection conn = null;
                 try {

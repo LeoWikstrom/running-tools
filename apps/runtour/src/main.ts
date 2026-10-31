@@ -302,6 +302,25 @@ function refineGeneratedCourse(removed: Place): void {
   })();
 }
 
+/**
+ * An anchor only when the URL is https; plain text otherwise. These URLs come
+ * from OSM/Wikipedia data and imported tour.json files — a javascript: href
+ * from a crafted tour must render inert.
+ */
+function safeLink(url: string | undefined, text: string): HTMLElement {
+  if (url?.startsWith('https://')) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = text;
+    return a;
+  }
+  const span = document.createElement('span');
+  span.textContent = text;
+  return span;
+}
+
 /** Pipeline places wear the accent, hand-pinned ones orange, must-pass vias teal. */
 const MANUAL_COLOR = '#b4762d';
 const VIA_COLOR = VARIANT === 'bus' ? '#1f8a8a' : '#2d6fb4';
@@ -318,20 +337,25 @@ function markerFor(p: Place, kind: 'place' | 'manual' | 'via'): L.CircleMarker {
   const narrationWiki = [p.wikipedia, ...(p.wikipedias ?? [])].find(
     (w) => w?.lang === narrationLang(),
   );
-  const links = p.sources
-    .map((s) => {
-      const url =
-        s.kind === 'wikipedia' && narrationWiki
-          ? `https://${narrationWiki.lang}.wikipedia.org/wiki/` +
-            encodeURIComponent(narrationWiki.title.replaceAll(' ', '_'))
-          : s.url;
-      return `<a href="${url}" target="_blank" rel="noopener">${s.kind}</a>`;
-    })
-    .join(' · ');
   const box = document.createElement('div');
-  box.innerHTML =
-    `<strong>${placeDisplayName(p, narrationLang())}</strong><br>` +
-    `score ${p.score} · at ${(p.d / 1000).toFixed(2)} km<br>${links}<br>`;
+  const title = document.createElement('strong');
+  title.textContent = placeDisplayName(p, narrationLang());
+  box.append(
+    title,
+    document.createElement('br'),
+    `score ${p.score} · at ${(p.d / 1000).toFixed(2)} km`,
+    document.createElement('br'),
+  );
+  p.sources.forEach((s, i) => {
+    const url =
+      s.kind === 'wikipedia' && narrationWiki
+        ? `https://${narrationWiki.lang}.wikipedia.org/wiki/` +
+          encodeURIComponent(narrationWiki.title.replaceAll(' ', '_'))
+        : s.url;
+    if (i > 0) box.append(' · ');
+    box.append(safeLink(url, s.kind));
+  });
+  box.append(document.createElement('br'));
   const remove = document.createElement('button');
   remove.textContent = 'Remove';
   remove.addEventListener('click', () => {
@@ -401,7 +425,7 @@ function renderEditor(p: Place, body: HTMLElement): void {
   const src = document.createElement('p');
   src.className = 'hint';
   if (entry.sourceUrl) {
-    src.innerHTML = `Source: <a href="${entry.sourceUrl}" target="_blank" rel="noopener">Wikipedia</a> (CC BY-SA)`;
+    src.append('Source: ', safeLink(entry.sourceUrl, 'Wikipedia'), ' (CC BY-SA)');
   }
   body.append(area, counts, row, src);
 
@@ -415,9 +439,7 @@ function renderEditor(p: Place, body: HTMLElement): void {
     img.loading = 'lazy';
     const cap = document.createElement('figcaption');
     cap.className = 'hint';
-    cap.innerHTML =
-      `${image.year ?? 'Historical'} · <a href="${image.pageUrl}" target="_blank" rel="noopener">` +
-      `${image.attribution}</a>`;
+    cap.append(`${image.year ?? 'Historical'} · `, safeLink(image.pageUrl, image.attribution));
     fig.append(img, cap);
     body.appendChild(fig);
   }
@@ -846,7 +868,9 @@ function addVia(c: PlaceCandidate): void {
   }).addTo(map);
   marker.bindTooltip(`${c.name} — must-pass`);
   const box = document.createElement('div');
-  box.innerHTML = `<strong>${c.name}</strong><br>must-pass place<br>`;
+  const strong = document.createElement('strong');
+  strong.textContent = c.name;
+  box.append(strong, document.createElement('br'), 'must-pass place', document.createElement('br'));
   const remove = document.createElement('button');
   remove.textContent = 'Remove';
   remove.addEventListener('click', () => {

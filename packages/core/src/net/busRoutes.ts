@@ -93,8 +93,11 @@ export function buildBusAreaQuery(bbox: BBox): string {
 export function buildBusSearchQuery(bbox: BBox, text: string, kind?: 'bus' | 'tram'): string {
   const b = `(${bbox.south.toFixed(5)},${bbox.west.toFixed(5)},${bbox.north.toFixed(5)},${bbox.east.toFixed(5)})`;
   const route = kind ? `^${kind}$` : '^(bus|tram)$';
-  const quoted = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  const regex = quoted.replace(/[.*+?^${}()|[\]]/g, '\\$&');
+  // `]` must be escaped too: unescaped it closes the ["ref"="…"] filter early.
+  const qlEscape = (s: string): string =>
+    s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\]/g, '\\]');
+  const quoted = qlEscape(text);
+  const regex = qlEscape(text.replace(/[.*+?^${}()|[\]]/g, '\\$&'));
   return (
     `[out:json][timeout:60];(` +
     `relation[type=route][route~"${route}"]["ref"="${quoted}"]${b};` +

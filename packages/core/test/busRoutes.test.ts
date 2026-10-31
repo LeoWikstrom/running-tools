@@ -168,7 +168,19 @@ describe('buildBusSearchQuery', () => {
   it('escapes quotes and regex specials in the term', () => {
     const q = buildBusSearchQuery(bbox, 'St. "X" (east)');
     expect(q).toContain('"ref"="St. \\"X\\" (east)"');
-    expect(q).toContain('St\\. \\"X\\" \\(east\\)');
+    // Regex value: regex-escaped first, then QL-string-escaped on top, so the
+    // regex engine receives St\. \"X\" \(east\) after the string layer parses.
+    expect(q).toContain('St\\\\. \\"X\\" \\\\(east\\\\)');
+  });
+
+  it('leaves no unescaped ] that could close a tag filter early', () => {
+    const q = buildBusSearchQuery(bbox, '12]abc(');
+    // Every ] in the built query is either a filter bracket following a
+    // quote/letter or an escaped \] inside a value — never a bare one
+    // straight after value text.
+    expect(q).toContain('"ref"="12\\]abc("');
+    // Regex value: regex-escaped first (\] \(), then QL-string-escaped on top.
+    expect(q).toContain('12\\\\\\]abc\\\\(');
   });
 });
 
