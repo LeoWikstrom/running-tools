@@ -67,7 +67,7 @@ export class TourRuntime {
   private offSince = Number.NaN;
   private playing = false;
   private readonly outcomes = new Map<string, PlaceOutcome>();
-  private readonly queue: string[] = [];
+  private queue: string[] = [];
 
   constructor(
     lats: ArrayLike<number>,
@@ -167,18 +167,24 @@ export class TourRuntime {
     return events;
   }
 
-  /** Drop queued clips that waited more than dropAfterM past their point. */
+  /**
+   * Drop queued clips that waited more than dropAfterM past their point.
+   * Forward iteration so drops emit in queue (FIFO) order — RunRuntime.java
+   * iterates forward too, and the golden traces pin the event order.
+   */
   private drainQueueDrops(): RuntimeEvent[] {
     const events: RuntimeEvent[] = [];
-    for (let i = this.queue.length - 1; i >= 0; i--) {
-      const id = this.queue[i]!;
+    const surviving: string[] = [];
+    for (const id of this.queue) {
       const place = this.places.find((p) => p.id === id)!;
       if (this.d > place.triggerD + this.s.dropAfterM) {
-        this.queue.splice(i, 1);
         this.outcomes.set(id, 'dropped');
         events.push({ type: 'drop', placeId: id });
+      } else {
+        surviving.push(id);
       }
     }
+    this.queue = surviving;
     return events;
   }
 

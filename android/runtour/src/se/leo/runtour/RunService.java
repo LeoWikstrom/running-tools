@@ -352,10 +352,16 @@ public class RunService extends Service implements LocationListener {
                     player.prepare();
                     player.start();
                 } catch (Exception ignored) {
+                    // Restore idle like the completion listener does — a stuck
+                    // playingId blocks the next trigger.
                     playingId = null;
+                    abandonFocus();
                 }
             } else if (ttsOk && !p.text.isEmpty()) {
                 tts.speak(p.text, TextToSpeech.QUEUE_FLUSH, new Bundle(), "repeat");
+            } else {
+                playingId = null;
+                abandonFocus();
             }
         }
     }

@@ -107,6 +107,29 @@ describe('TourRuntime', () => {
     expect(names(trace[4]!)).toEqual([]);
   });
 
+  it('drops two overdue queued clips in queue (FIFO) order in one update', () => {
+    const sc = scenario(
+      'queue-drop-fifo',
+      [
+        { id: 'A', triggerD: 500 },
+        { id: 'B', triggerD: 600 },
+        { id: 'C', triggerD: 700 },
+      ],
+      [
+        { kind: 'fix', fix: fixAt(0, 0) },
+        { kind: 'fix', fix: fixAt(150, 510) }, // A plays
+        { kind: 'fix', fix: fixAt(180, 620) }, // B queued behind A
+        { kind: 'fix', fix: fixAt(210, 710) }, // C queued behind B
+        { kind: 'fix', fix: fixAt(400, 1000) }, // both waited > 200 m past their points
+        { kind: 'end' },
+      ],
+    );
+    const trace = run(sc);
+    expect(names(trace[1]!)).toEqual(['play:A']);
+    expect(names(trace[4]!)).toEqual(['drop:B', 'drop:C']);
+    expect(names(trace[5]!)).toEqual([]);
+  });
+
   it('plays the queued clip when the first ends in time', () => {
     const sc = scenario(
       'queue-play',
