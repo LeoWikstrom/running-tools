@@ -282,8 +282,13 @@ export function assembleRoutePolyline(
     if (closed) {
       const ring = seg.slice(0, -1);
       const next = segs[i + 1];
+      // The exit target is the next way's end nearer the ring itself, not the
+      // nearer-to-entry end: an exit street bending back behind the roundabout
+      // has its far end closest to the entry, which aimed the arc wrong and
+      // drove the street backwards.
+      const ringDist = (p: LatLon): number => dist(ring[nearestIndex(ring, p)]!, p);
       const exitTarget = next
-        ? dist(next[0]!, end) <= dist(next[next.length - 1]!, end)
+        ? ringDist(next[0]!) <= ringDist(next[next.length - 1]!)
           ? next[0]!
           : next[next.length - 1]!
         : end;

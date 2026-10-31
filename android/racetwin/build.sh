@@ -10,7 +10,7 @@ MIN_API=26
 SDK_DIR="${SDK_DIR:-$HOME/android-sdk}"
 ANDROID_JAR="${ANDROID_JAR:-$SDK_DIR/android-$API.jar}"
 KS="../runtour/keystore/runtour.jks"
-KS_PASS="runtour"
+KS_PASS="${KS_PASS:-runtour}"
 VERSION_NAME="${VERSION_NAME:-0.1}"
 VERSION_CODE="$(date +%Y%m%d%H)"   # grows with every build, so reinstalls upgrade in place
 
@@ -44,11 +44,13 @@ aapt2 link -o build/base.apk -I "$ANDROID_JAR" \
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" \
   build/res.zip
 
-# 3. java -> class -> dex
+# 3. java -> class -> dex (NUL-separated so paths with spaces survive)
+mapfile -d '' JAVA_SRCS < <(find src build/gen -name '*.java' -print0)
 javac --release 11 -encoding UTF-8 -cp "$ANDROID_JAR" -d build/classes \
-  $(find src build/gen -name '*.java')
+  "${JAVA_SRCS[@]}"
+mapfile -d '' CLASS_FILES < <(find build/classes -name '*.class' -print0)
 d8 --release --lib "$ANDROID_JAR" --min-api "$MIN_API" --output build/dex \
-  $(find build/classes -name '*.class')
+  "${CLASS_FILES[@]}"
 
 # 4. add classes.dex and align resources.arsc
 python3 ../runtour/align.py build/base.apk build/dex/classes.dex build/aligned.apk

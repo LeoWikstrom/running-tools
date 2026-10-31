@@ -104,6 +104,37 @@ describe('assembleRoutePolyline', () => {
     expect(onRing).toHaveLength(1);
   });
 
+  it('aims the roundabout exit at the ring, not at the entry point', () => {
+    // The exit street bends back behind the roundabout, so its far end lies
+    // nearer the ENTRY point than the exit node does. Picking the exit target
+    // by distance to the entry chose that far end and drove the street
+    // backwards; the target must be the next way's end nearer the ring.
+    const entry = way(40, [[0, 0.0005], [0, 0.0015]]);
+    const ring8 = way(41, [
+      [0, 0.0025],
+      [0.00035, 0.00235],
+      [0.0005, 0.002],
+      [0.00035, 0.00165],
+      [0, 0.0015],
+      [-0.00035, 0.00165],
+      [-0.0005, 0.002],
+      [-0.00035, 0.00235],
+      [0, 0.0025],
+    ]);
+    const exit = way(42, [
+      [0.0005, 0.002],
+      [0.0001, 0.00115],
+    ]);
+    const { points, gaps } = assembleRoutePolyline(
+      relation([40, 41, 42]),
+      wayMap(entry, ring8, exit),
+    );
+    expect(gaps).toBe(0);
+    // Ring walked entry → exit node, then the street driven forwards.
+    expect(points[points.length - 2]).toEqual({ lat: 0.0005, lon: 0.002 });
+    expect(points[points.length - 1]).toEqual({ lat: 0.0001, lon: 0.00115 });
+  });
+
   it('returns empty for a relation with no usable ways', () => {
     const { points } = assembleRoutePolyline(relation([99]), wayMap());
     expect(points).toHaveLength(0);

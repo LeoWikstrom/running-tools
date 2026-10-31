@@ -49,6 +49,16 @@ describe('parseGpx on synthetic inputs', () => {
     expect(gpx.points[0]?.lat).toBe(57.0);
   });
 
+  it('accepts closing tags with trailing whitespace (old exporters)', () => {
+    const xml = `<gpx><trk><trkseg>
+      <trkpt lat="57.0" lon="12.0"><ele>10</ele></trkpt >
+      <trkpt lat="57.001" lon="12.0"><ele>11</ele></trkpt >
+    </trkseg></trk></gpx>`;
+    const gpx = parseGpx(xml);
+    expect(gpx.points.length).toBe(2);
+    expect(gpx.points[0]?.ele).toBe(10);
+  });
+
   it('handles self-closing trkpt without elevation', () => {
     const xml = `<gpx><trk><trkseg>
       <trkpt lat="57.0" lon="12.0"/><trkpt lat="57.001" lon="12.0"/>

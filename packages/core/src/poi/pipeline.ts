@@ -148,7 +148,6 @@ function addWikipedia(target: PlaceCandidate, page?: { lang: string; title: stri
 
 function mergeInto(target: PlaceCandidate, extra: PlaceCandidate): void {
   target.wikidataId ??= extra.wikidataId;
-  addWikipedia(target, target.wikipedia);
   addWikipedia(target, extra.wikipedia);
   for (const w of extra.wikipedias ?? []) addWikipedia(target, w);
   // Prefer an English page for the default narration language.
@@ -266,7 +265,11 @@ export function buildPlaces(
     if (!pass) continue;
     const score = interestScore(c);
     if (score <= 0) continue;
-    const id = c.wikidataId ?? `${c.sources[0]?.kind ?? 'place'}:${normalizeName(c.name)}`;
+    // The fallback id carries rounded coordinates: two distant places sharing
+    // a name must not collide (an exclude would remove both).
+    const id =
+      c.wikidataId ??
+      `${c.sources[0]?.kind ?? 'place'}:${normalizeName(c.name)}:${c.lat.toFixed(3)},${c.lon.toFixed(3)}`;
     if (excludeIds?.has(id)) continue;
     if (!visible(c, pass.along)) continue;
     placed.push({

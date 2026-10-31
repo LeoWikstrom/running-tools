@@ -462,10 +462,11 @@ export async function beamSearch(
     const amp = roots.length > 1 || seed === 1 ? 0 : 0.03;
     const noise = (i: number) =>
       1 + amp * ((((i * 2654435761 + seed * 2246822519) >>> 0) % 1024) / 1024);
-    bucket.sort(
-      (x, y) =>
-        partialRank(s, x, weights, tp) * noise(x) - partialRank(s, y, weights, tp) * noise(y),
-    );
+    // partialRank is sqrt-heavy; computed once per state instead of twice per
+    // comparison. Same product per state, stable sort: order is bit-identical.
+    const rank = new Map<number, number>();
+    for (const i of bucket) rank.set(i, partialRank(s, i, weights, tp) * noise(i));
+    bucket.sort((x, y) => rank.get(x)! - rank.get(y)!);
     // Cap states per end node, or the beam fills with near-identical prefixes
     // of the single best path and loses diversity. Small graphs have few
     // nodes, so the cap scales up to keep distinct histories alive.

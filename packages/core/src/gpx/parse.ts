@@ -12,7 +12,8 @@ export interface ParsedGpx {
 
 // Regex-based parser: DOMParser is unavailable in workers, and GPX point
 // extraction only needs trkpt/rtept attributes plus an optional child <ele>.
-const POINT_RE = /<(trkpt|rtept)\b([^>]*)\/>|<(trkpt|rtept)\b([^>]*)>([\s\S]*?)<\/\3>/g;
+// `</trkpt >` (trailing whitespace) comes out of some old exporters.
+const POINT_RE = /<(trkpt|rtept)\b([^>]*)\/>|<(trkpt|rtept)\b([^>]*)>([\s\S]*?)<\/\3\s*>/g;
 const LAT_RE = /\blat\s*=\s*["']([^"']+)["']/;
 const LON_RE = /\blon\s*=\s*["']([^"']+)["']/;
 const ELE_RE = /<ele>\s*([-\d.eE+]+)\s*<\/ele>/;
