@@ -6,7 +6,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # write: the build job force-pushes the assembled site to the `deployed`
+  # branch, which the EQ2 homepage deploy clones to host the apps on eq2.se.
+  contents: write
   pages: write
   id-token: write
 
@@ -35,6 +37,18 @@ jobs:
           done
           # The bus variant builds from the runtour codebase into dist-bus.
           cp -r apps/runtour/dist-bus _site/bustour
+      - name: Publish _site to the deployed branch
+        # The second host (eq2.se/apps/, via EQ2-Technology/homepage's deploy
+        # workflow) clones this branch instead of rebuilding — the dists are
+        # path-agnostic (vite base './').
+        run: |
+          cd _site
+          git init -b deployed
+          git add -A
+          git -c user.name=actions -c user.email=actions@github.com \
+            commit -m "site $GITHUB_SHA"
+          git push --force \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" deployed
       - uses: actions/upload-pages-artifact@v3
 
   deploy:
