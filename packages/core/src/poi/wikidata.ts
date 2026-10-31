@@ -1,5 +1,9 @@
-import { cacheGet, cacheSet } from '../net/cache';
+import { cacheGetFresh, cacheSetStamped } from '../net/cache';
+import { fetchWithTimeout } from '../net/fetchWithTimeout';
 import type { PlaceCandidate } from './types';
+
+/** Wikipedia/Wikidata data lives; a month-old answer is worth refetching. */
+const POI_TTL_MS = 30 * 24 * 3600 * 1000;
 
 export interface WikidataItem {
   id: string;
@@ -128,19 +132,26 @@ export async function fetchItemsAround(
 ): Promise<WikidataItem[]> {
   const wikiLangs = options.wikiLangs ?? ['en'];
   const key = `wikidata:v2:${lat.toFixed(3)},${lon.toFixed(3)},${radiusKm.toFixed(1)},${wikiLangs.join('+')}`;
-  const cached = await cacheGet<WikidataItem[]>(key);
+  const cached = await cacheGetFresh<WikidataItem[]>(key, POI_TTL_MS);
   if (cached) return cached;
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   const query = buildQuery(lat, lon, radiusKm, options.languages ?? 'en,sv,mul', wikiLangs);
-  const res = await fetchFn(`${ENDPOINT}?query=${encodeURIComponent(query)}&format=json`, {
-    headers: { Accept: 'application/sparql-results+json' },
-  });
+  const url = `${ENDPOINT}?query=${encodeURIComponent(query)}&format=json`;
+  const init = { headers: { Accept: 'application/sparql-results+json' } };
+  let res = await fetchWithTimeout(fetchFn, url, init, 30_000);
+  if (res.status === 429) {
+    // The query service rate-limits; wait what it asks (capped) and retry once.
+    const retryAfter = Number(res.headers.get('Retry-After') ?? '5');
+    const waitS = Math.min(Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 5, 60);
+    await new Promise((r) => setTimeout(r, waitS * 1000));
+    res = await fetchWithTimeout(fetchFn, url, init, 30_000);
+  }
   if (!res.ok) throw new Error(`Wikidata query service returned ${res.status}`);
   const items = parseSparqlResults(
     (await res.json()) as { results?: { bindings?: SparqlBinding[] } },
     wikiLangs,
   );
-  await cacheSet(key, items);
+  await cacheSetStamped(key, items);
   return items;
 }
 

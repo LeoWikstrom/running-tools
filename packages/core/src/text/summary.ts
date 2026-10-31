@@ -1,5 +1,9 @@
-import { cacheGet, cacheSet } from '../net/cache';
+import { cacheGetFresh, cacheSetStamped } from '../net/cache';
+import { fetchWithTimeout } from '../net/fetchWithTimeout';
 import { countWords } from './trim';
+
+/** Wikipedia texts live; a month-old answer is worth refetching. */
+const TEXT_TTL_MS = 30 * 24 * 3600 * 1000;
 
 export interface PlaceExtract {
   extract: string;
@@ -28,13 +32,16 @@ async function restSummary(
 ): Promise<PlaceExtract | null> {
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   const key = `wikisummary:v1:${lang}:${title}`;
-  const cached = await cacheGet<PlaceExtract | null>(key);
+  const cached = await cacheGetFresh<PlaceExtract | null>(key, TEXT_TTL_MS);
   if (cached !== undefined) return cached;
-  const res = await fetchFn(
+  const res = await fetchWithTimeout(
+    fetchFn,
     `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replaceAll(' ', '_'))}`,
+    {},
+    20_000,
   );
   if (res.status === 404) {
-    await cacheSet(key, null);
+    await cacheSetStamped(key, null);
     return null;
   }
   if (!res.ok) throw new Error(`Wikipedia summary (${lang}) returned ${res.status}`);
@@ -52,7 +59,7 @@ async function restSummary(
           `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title.replaceAll(' ', '_'))}`,
       }
     : null;
-  await cacheSet(key, out);
+  await cacheSetStamped(key, out);
   return out;
 }
 
@@ -76,7 +83,7 @@ async function fullPageSections(
 ): Promise<{ heading: string; body: string }[]> {
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   const key = `wikiextract:v1:${lang}:${title}`;
-  let plain = await cacheGet<string>(key);
+  let plain = await cacheGetFresh<string>(key, TEXT_TTL_MS);
   if (plain === undefined) {
     const params = new URLSearchParams({
       action: 'query',
@@ -87,13 +94,18 @@ async function fullPageSections(
       exsectionformat: 'wiki',
       titles: title,
     });
-    const res = await fetchFn(`https://${lang}.wikipedia.org/w/api.php?${params.toString()}`);
+    const res = await fetchWithTimeout(
+      fetchFn,
+      `https://${lang}.wikipedia.org/w/api.php?${params.toString()}`,
+      {},
+      20_000,
+    );
     if (!res.ok) throw new Error(`Wikipedia extracts (${lang}) returned ${res.status}`);
     const json = (await res.json()) as {
       query?: { pages?: Record<string, { extract?: string }> };
     };
     plain = Object.values(json.query?.pages ?? {})[0]?.extract ?? '';
-    await cacheSet(key, plain);
+    await cacheSetStamped(key, plain);
   }
   if (!plain) return [];
   return splitExtractSections(plain);

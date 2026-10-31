@@ -1,6 +1,10 @@
-import { cacheGet, cacheSet } from '../net/cache';
+import { cacheGetFresh, cacheSetStamped } from '../net/cache';
+import { fetchWithTimeout } from '../net/fetchWithTimeout';
 import { haversineMeters } from '../geo';
 import type { PlaceCandidate } from './types';
+
+/** Wikipedia/Wikidata data lives; a month-old answer is worth refetching. */
+const POI_TTL_MS = 30 * 24 * 3600 * 1000;
 
 export interface WikiGeoPage {
   pageid: number;
@@ -43,7 +47,7 @@ async function runQuery(
   options: WikiFetchOptions,
 ): Promise<QueryPage[]> {
   if (key) {
-    const cached = await cacheGet<QueryPage[]>(key);
+    const cached = await cacheGetFresh<QueryPage[]>(key, POI_TTL_MS);
     if (cached) return cached;
   }
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
@@ -64,7 +68,12 @@ async function runQuery(
       ...params,
       ...cont,
     });
-    const res = await fetchFn(`https://${lang}.wikipedia.org/w/api.php?${search.toString()}`);
+    const res = await fetchWithTimeout(
+      fetchFn,
+      `https://${lang}.wikipedia.org/w/api.php?${search.toString()}`,
+      {},
+      20_000,
+    );
     if (!res.ok) throw new Error(`Wikipedia ${lang} returned ${res.status}`);
     const json = (await res.json()) as WikiQueryResponse;
     for (const p of Object.values(json.query?.pages ?? {})) {
@@ -80,7 +89,7 @@ async function runQuery(
     cont = json.continue;
   }
   const pages = [...byId.values()];
-  if (key) await cacheSet(key, pages);
+  if (key) await cacheSetStamped(key, pages);
   return pages;
 }
 

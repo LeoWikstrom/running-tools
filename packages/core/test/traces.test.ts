@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildTraceGrid,
+  fetchTracePoints,
   parseTrackSegments,
   runPacedPoints,
   traceBoxes,
@@ -89,6 +90,30 @@ describe('traceBoxes', () => {
       (Math.max(...boxes.map((b) => b.right)) - Math.min(...boxes.map((b) => b.left))) / 0.02,
     );
     expect(boxes.length).toBeLessThan(rows * cols);
+  });
+});
+
+describe('fetchTracePoints', () => {
+  it('does not count a user cancel mid-pagination as truncation', async () => {
+    // Full pages keep the paging loop going until the cancel lands.
+    const fullPage =
+      '<gpx><trk><trkseg>' +
+      Array.from({ length: 5000 }, (_, i) => `<trkpt lat="${57.7 + i * 1e-6}" lon="11.95"/>`).join(
+        '',
+      ) +
+      '</trkseg></trk></gpx>';
+    let calls = 0;
+    const fetchFn = (() => {
+      calls++;
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(fullPage) });
+    }) as unknown as typeof fetch;
+    const result = await fetchTracePoints(
+      { lat: 57.7, lon: 11.95 },
+      500,
+      { fetchFn, shouldCancel: () => calls >= 1 },
+    );
+    expect(calls).toBe(1);
+    expect(result.truncated).toBe(0);
   });
 });
 

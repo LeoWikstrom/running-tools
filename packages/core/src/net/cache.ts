@@ -36,3 +36,19 @@ export async function cacheSetOrThrow(key: string, value: unknown): Promise<void
   }
   await set(key, value);
 }
+
+/**
+ * TTL pair for caches of living data (Wikipedia/Wikidata POIs and texts).
+ * Terrain tiles and Overpass graphs stay on the plain pair: effectively
+ * static and expensive to refetch. A legacy unwrapped entry counts as stale.
+ */
+export async function cacheSetStamped(key: string, value: unknown): Promise<void> {
+  await cacheSet(key, { savedAt: Date.now(), value });
+}
+
+export async function cacheGetFresh<T>(key: string, maxAgeMs: number): Promise<T | undefined> {
+  const entry = await cacheGet<{ savedAt?: unknown; value?: T }>(key);
+  if (entry === undefined || typeof entry.savedAt !== 'number') return undefined;
+  if (Date.now() - entry.savedAt > maxAgeMs) return undefined;
+  return entry.value;
+}

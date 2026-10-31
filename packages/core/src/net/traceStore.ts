@@ -41,7 +41,13 @@ export async function saveTraces(
   await cacheSetOrThrow(`trace:${entry.id}`, found.grid);
   const all = (await listTraces()).filter((t) => t.id !== entry.id);
   all.push(entry);
-  await cacheSet(INDEX_KEY, all);
+  try {
+    // The index write must be loud too: failing silently orphans the payload.
+    await cacheSetOrThrow(INDEX_KEY, all);
+  } catch (err) {
+    await cacheSet(`trace:${entry.id}`, undefined);
+    throw err;
+  }
   return entry;
 }
 

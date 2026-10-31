@@ -98,18 +98,21 @@ export class TerrainSampler {
     if (!bytes) {
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 2; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20_000);
         try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 20_000);
           const res = await this.fetchFn(TILE_URL(this.zoom, tx, ty), {
             signal: controller.signal,
           });
-          clearTimeout(timer);
           if (!res.ok) throw new Error(`Terrain tile ${key} returned ${res.status}`);
+          // The body read stays under the timer too.
           bytes = await res.arrayBuffer();
           break;
         } catch (err) {
           lastError = err;
+        } finally {
+          // A throw from fetchFn used to leave the timer running.
+          clearTimeout(timer);
         }
       }
       if (!bytes) throw new Error(`Terrain tile ${key} failed: ${String(lastError)}`);

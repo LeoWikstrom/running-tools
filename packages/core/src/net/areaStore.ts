@@ -45,7 +45,13 @@ export async function saveArea(
   await cacheSetOrThrow(`area:${area.id}`, response);
   const areas = (await listAreas()).filter((a) => a.id !== area.id);
   areas.push(area);
-  await cacheSet(INDEX_KEY, areas);
+  try {
+    // The index write must be loud too: failing silently orphans the payload.
+    await cacheSetOrThrow(INDEX_KEY, areas);
+  } catch (err) {
+    await cacheSet(`area:${area.id}`, undefined);
+    throw err;
+  }
   return area;
 }
 

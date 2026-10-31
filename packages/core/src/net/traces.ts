@@ -173,7 +173,10 @@ export async function fetchTracePoints(
     if (opts.shouldCancel?.()) break;
     const box = boxes[b]!;
     const bbox = `${box.left.toFixed(5)},${box.bottom.toFixed(5)},${box.right.toFixed(5)},${box.top.toFixed(5)}`;
-    let hitMaxPages = true;
+    // Truncation means the loop genuinely exhausted MAX_PAGES on full pages —
+    // a user cancel or a failed box must not count (it inflated the UI's
+    // "capped" warning).
+    let hitMaxPages = false;
     for (let page = 0; page < MAX_PAGES; page++) {
       if (opts.shouldCancel?.()) break;
       let text: string;
@@ -181,7 +184,6 @@ export async function fetchTracePoints(
         text = await fetchPage(doFetch, bbox, page);
       } catch {
         failedBoxes++;
-        hitMaxPages = false;
         break;
       }
       const segments = parseTrackSegments(text);
@@ -191,10 +193,8 @@ export async function fetchTracePoints(
       timed += paced.timed;
       kept.push(...paced.kept);
       // A short page is the last one; the API pages in fixed 5 000s.
-      if (pageCount < PAGE_SIZE) {
-        hitMaxPages = false;
-        break;
-      }
+      if (pageCount < PAGE_SIZE) break;
+      if (page === MAX_PAGES - 1) hitMaxPages = true;
     }
     if (hitMaxPages) truncated++;
     opts.onProgress?.(b + 1, boxes.length, kept.length);
@@ -214,7 +214,8 @@ async function fetchPage(doFetch: typeof fetch, bbox: string, page: number): Pro
         headers: { Accept: 'application/gpx+xml' },
         signal: controller.signal,
       });
-      clearTimeout(timer);
+      // The body read stays under the timer: a 5 000-point page can stall
+      // mid-body just as well as mid-headers.
       if (res.ok) return await res.text();
       // Deterministic 4xx (except 429 rate-limit): retrying will not help.
       if (res.status >= 400 && res.status < 500 && res.status !== 429) {
@@ -224,10 +225,11 @@ async function fetchPage(doFetch: typeof fetch, bbox: string, page: number): Pro
       // thing that helps, and failing the box is better than hammering it.
       lastError = new Error(`trackpoints API returned ${res.status}`);
     } catch (err) {
-      clearTimeout(timer);
       // Non-retryable 4xx: propagate immediately without a retry.
       if (err instanceof Error && err.message.startsWith('trackpoints API returned 4')) throw err;
       lastError = err;
+    } finally {
+      clearTimeout(timer);
     }
     await new Promise((r) => setTimeout(r, 2000));
   }
