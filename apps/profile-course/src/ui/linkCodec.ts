@@ -73,7 +73,10 @@ export function encodeLink(s: LinkState): string {
   dv.setUint8(0, VERSION);
   dv.setInt32(1, Math.round(s.lat * 1e5));
   dv.setInt32(5, Math.round(s.lon * 1e5));
-  dv.setUint8(9, u8(s.radiusKm * 2));
+  // Codec limit: the radius lives in one byte of half-km steps, so 127.5 km
+  // is the largest encodable value — clamped, never wrapped. The zone slider
+  // stays far below it.
+  dv.setUint8(9, u8(Math.min(127.5, s.radiusKm) * 2));
   dv.setUint16(10, u16((s.distanceKm ?? 0) * 10));
   dv.setUint16(12, u16(s.fromKm * 10));
   dv.setUint16(14, u16((s.toKm ?? 0) * 10));

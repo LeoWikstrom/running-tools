@@ -540,6 +540,25 @@ export function createMap(
     if (pullStart) e.preventDefault();
   });
 
+  function cancelPullNow(): boolean {
+    if (!pullStart) return false;
+    clearHoldTimer();
+    clearCycleTimer();
+    clearRubber();
+    hidePointLabel();
+    pullStart = null;
+    pullIndex = -1;
+    pullOnLine = false;
+    pullAnchors = null;
+    pullLatLng = null;
+    pullHeld = false;
+    map.dragging.enable();
+    map.scrollWheelZoom.enable();
+    // The release still to come must not be read as a tap on the course.
+    lastDragEnd = Date.now();
+    return true;
+  }
+
   return {
     armViaPlacement(cb) {
       viaTapCb = cb;
@@ -600,6 +619,10 @@ export function createMap(
       lineGrab = handlers.line ?? null;
     },
     disarmCourseDrag() {
+      // Mid-pull (e.g. exitEditing) the pull disabled wheel zoom and map
+      // dragging; disarming must give them back or they stay dead for the
+      // session.
+      cancelPullNow();
       pullCb = null;
       grabCb = null;
       longPressCb = null;
@@ -782,22 +805,7 @@ export function createMap(
       hideHover();
     },
     cancelPull() {
-      if (!pullStart) return false;
-      clearHoldTimer();
-      clearCycleTimer();
-      clearRubber();
-      hidePointLabel();
-      pullStart = null;
-      pullIndex = -1;
-      pullOnLine = false;
-      pullAnchors = null;
-      pullLatLng = null;
-      pullHeld = false;
-      map.dragging.enable();
-      map.scrollWheelZoom.enable();
-      // The release still to come must not be read as a tap on the course.
-      lastDragEnd = Date.now();
-      return true;
+      return cancelPullNow();
     },
     getStart() {
       if (!marker) return null;

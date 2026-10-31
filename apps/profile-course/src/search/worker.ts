@@ -105,10 +105,10 @@ async function downloadArea(center: LatLon, radiusMeters: number): Promise<void>
 }
 
 async function downloadTraces(center: LatLon, radiusMeters: number): Promise<void> {
-  cancelled = false;
+  const myGen = cancelGen;
   post({ type: 'progress', stage: 'GPS traces: 0 %', fraction: 0.01, bestScore: null });
   const found = await fetchTracePoints(center, radiusMeters, {
-    shouldCancel: () => cancelled,
+    shouldCancel: () => cancelGen !== myGen,
     onProgress: (done, total, kept) => {
       const pct = Math.round((done / total) * 100);
       post({
@@ -120,7 +120,7 @@ async function downloadTraces(center: LatLon, radiusMeters: number): Promise<voi
     },
   });
   // "Cancel stops it, and then nothing is saved" — the UI promises exactly that.
-  if (cancelled) {
+  if (cancelGen !== myGen) {
     post({ type: 'traces', traces: await listTraces() });
     return;
   }
@@ -134,7 +134,13 @@ let graph: Graph | null = null;
 let startNode = -1;
 let validEnd: Uint8Array | null = null;
 let preparedKey = '';
-let cancelled = false;
+/**
+ * Cancellation is a generation counter, not a shared boolean: each operation
+ * captures the value at start and is cancelled when it moves on. A boolean
+ * reset by one operation (`cancelled = false`) un-cancelled every other
+ * in-flight operation sharing the flag.
+ */
+let cancelGen = 0;
 /**
  * The latest search's generation (set by the main thread). A search whose
  * generation is no longer this one is stale: a new `search` message must not
@@ -421,7 +427,8 @@ async function search(
   opts: SearchOptionsIn,
   gen: number,
 ): Promise<void> {
-  const stale = (): boolean => cancelled || gen !== searchGen;
+  const myGen = cancelGen;
+  const stale = (): boolean => cancelGen !== myGen || gen !== searchGen;
   const t0 = performance.now();
   await ensurePrepared(
     start,
@@ -889,8 +896,8 @@ async function improveMatched(
   desiredMix: [number, number, number, number] | null,
   weightsIn: Record<string, number> | null,
 ): Promise<void> {
+  const myGen = cancelGen;
   const { path: currentPath } = await ensureCurrentPath(ref, lats, lons);
-  cancelled = false;
   const g = graph!;
   const weights = { ...DEFAULT_WEIGHTS, ...(weightsIn ?? {}) };
   const course = assembleCourse(g, currentPath);
@@ -907,7 +914,7 @@ async function improveMatched(
       weights,
       maxCandidates: 1,
       passes: 6,
-      shouldCancel: () => cancelled,
+      shouldCancel: () => cancelGen !== myGen,
     },
   );
   post({
@@ -938,7 +945,6 @@ onmessage = (event: MessageEvent<MainToWorker>) => {
     case 'search':
       // Adopting the new generation is what cancels a still-running search.
       searchGen = msg.generation;
-      cancelled = false;
       search(
         msg.start,
         msg.radiusMeters,
@@ -1039,7 +1045,7 @@ onmessage = (event: MessageEvent<MainToWorker>) => {
       );
       break;
     case 'cancel':
-      cancelled = true;
+      cancelGen++;
       break;
   }
 };

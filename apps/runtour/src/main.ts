@@ -259,9 +259,12 @@ function updateCourseGeometry(pts: [number, number][]): void {
     generated course without it so the detour can straighten. */
 function refineGeneratedCourse(removed: Place): void {
   if (!genContext || refining) return;
+  // Match by id (OSM-only places have no wikidataId) and keep the haversine
+  // fallback: ids in genContext.places use a name: form that may not equal
+  // the removed place's osm: id.
   genContext.places = genContext.places.filter(
     (p) =>
-      p.id !== removed.wikidataId &&
+      p.id !== removed.id &&
       haversineMeters(p.lat, p.lon, removed.lat, removed.lon) > 80,
   );
   refining = true;
@@ -400,11 +403,15 @@ function renderEditor(p: Place, body: HTMLElement): void {
   refetch.textContent = 'Refetch';
   refetch.addEventListener('click', () => {
     refetch.disabled = true;
+    // The fetch overwrites the entry on return; typing meanwhile would be
+    // silently lost, so the box is read-only for the round-trip.
+    area.disabled = true;
     void (async () => {
       const got = await fetchPlaceText(p, narrationLang(), targetSeconds()).catch(() => null);
       if (got) texts.set(p.id, got);
       else setStatus(`No Wikipedia text found for ${p.name}.`);
       refetch.disabled = false;
+      area.disabled = false;
       render();
     })();
   });
@@ -471,6 +478,10 @@ function highlightMarker(id: string): void {
 }
 
 function render(): void {
+  // The markers are about to be removed; a pending highlight timer would
+  // restore a marker that is no longer on the map.
+  clearTimeout(highlightTimer);
+  highlighted = null;
   markerLayer.clearLayers();
   placeMarkers.clear();
   const manualIds = new Set(manual.map((m) => m.id));
@@ -563,14 +574,22 @@ async function relangTexts(): Promise<void> {
   if (list.length === 0 || relanging) return;
   relanging = true;
   const lang = narrationLang();
+  // A new GPX/tour mid-flight clears `texts`; keep the stale loop from
+  // writing the old course's entries into the new one.
+  const courseAtStart = course;
   let done = 0;
   for (const p of list) {
     const got = await fetchPlaceText(p, lang, targetSeconds()).catch(() => null);
+    if (course !== courseAtStart) {
+      relanging = false;
+      return;
+    }
     if (got) texts.set(p.id, got);
     done++;
     setStatus(`Switching texts to ${lang} ${done}/${list.length}…`);
   }
   relanging = false;
+  if (course !== courseAtStart) return;
   render();
   setStatus(`Texts switched to ${lang}.`);
   toast(`Texts switched to ${lang}.`);
@@ -743,7 +762,12 @@ for (const [box, key] of [
 const historicImagesBox = el<HTMLInputElement>('historic-images');
 // A rider looks at the screen; a runner mostly cannot, so only bus opts in by
 // default. The box lives in both builds.
-historicImagesBox.checked = VARIANT === 'bus';
+const storedHistoricImages = localStorage.getItem('runtour.historicImages');
+historicImagesBox.checked =
+  storedHistoricImages !== null ? storedHistoricImages === '1' : VARIANT === 'bus';
+historicImagesBox.addEventListener('change', () => {
+  localStorage.setItem('runtour.historicImages', historicImagesBox.checked ? '1' : '0');
+});
 
 async function runFetchImages(): Promise<void> {
   if (!historicImagesBox.checked) return;
@@ -1346,6 +1370,15 @@ function openAreaPrompt(
   startKey: string,
 ): void {
   let handled = false;
+  // Dismissing the dialog mid-download starts the generation; the download's
+  // .then() must not start a second one over it (the orphan's .finally()
+  // nulled `generation` and broke Cancel).
+  let started = false;
+  const startOnce = (): void => {
+    if (started) return;
+    started = true;
+    startGeneration();
+  };
   const box = document.createElement('div');
   const neededKm = Math.max(Math.ceil((neededRadiusM / 1000) * 2) / 2, Number(areaRadius.value));
   const text = document.createElement('p');
@@ -1379,7 +1412,7 @@ function openAreaPrompt(
       .then(() => {
         handled = true;
         closeDialog();
-        startGeneration();
+        startOnce();
       })
       .catch((err: unknown) => {
         text.textContent = err instanceof Error ? err.message : String(err);
@@ -1393,7 +1426,7 @@ function openAreaPrompt(
     localStorage.setItem('runtour.skipAreaPrompt', '1');
     handled = true;
     closeDialog();
-    startGeneration();
+    startOnce();
   });
   row.append(radiusLabel, downloadBtn, never);
   box.append(text, row);
@@ -1402,7 +1435,7 @@ function openAreaPrompt(
     // ✕, Esc or the backdrop: generation goes ahead, and this start point
     // stops asking.
     areaPromptDismissedFor = startKey;
-    startGeneration();
+    startOnce();
   });
 }
 

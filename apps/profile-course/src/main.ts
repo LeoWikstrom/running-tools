@@ -1536,6 +1536,13 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
         if (dialogOpen()) closeDialog();
       }
       if (pendingEdit) {
+        // Same staleness guard as 'matched': once a new search has started,
+        // the speculative history entry belongs to the old context and was
+        // already superseded — popping would eat the new context's history.
+        if (searching) {
+          pendingEdit = false;
+          break;
+        }
         // The reroute failed, so the course is unchanged: drop the entry and
         // marker that were added in anticipation.
         pendingEdit = false;

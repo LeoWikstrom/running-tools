@@ -106,6 +106,7 @@ export function initLocate(
       else reflect(false);
     },
     exitRunMode(): void {
+      stopWatching();
       runMode = false;
       reflect(false);
       hide();

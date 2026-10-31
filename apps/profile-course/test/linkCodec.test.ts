@@ -27,6 +27,13 @@ describe('link codec', () => {
     expect(decodeLink(encodeLink(base))).toEqual(base);
   });
 
+  it('round-trips the radius at the one-byte codec limit and clamps past it', () => {
+    const atLimit = { ...base, radiusKm: 127.5 };
+    expect(decodeLink(encodeLink(atLimit))).toEqual(atLimit);
+    const beyond = { ...base, radiusKm: 300 };
+    expect(decodeLink(encodeLink(beyond))).toEqual(atLimit);
+  });
+
   it('round-trips every field at once', () => {
     const state: LinkState = {
       lat: -33.86882,
