@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.GeolocationPermissions;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -35,10 +36,12 @@ public class MainActivity extends Activity {
     private static final String BASE = "https://" + HOST + "/index.html";
 
     private static final int REQ_GEO_PERMISSION = 12;
+    private static final int REQ_FILE_CHOOSER = 13;
 
     private WebView web;
     private String pendingGeoOrigin;
     private GeolocationPermissions.Callback pendingGeoCallback;
+    private ValueCallback<Uri[]> pendingFileCallback;
 
     private static String mimeFor(String path) {
         if (path.endsWith(".html")) return "text/html";
@@ -117,9 +120,41 @@ public class MainActivity extends Activity {
                         new String[] {"android.permission.ACCESS_FINE_LOCATION"},
                         REQ_GEO_PERMISSION);
             }
+
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                    FileChooserParams params) {
+                if (pendingFileCallback != null) pendingFileCallback.onReceiveValue(null);
+                pendingFileCallback = callback;
+                // The page's accept list (.gpx) is deliberately not forwarded:
+                // GPX has no reliably registered MIME type, so a typed chooser
+                // greys out the very files the input is for.
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                try {
+                    startActivityForResult(intent, REQ_FILE_CHOOSER);
+                } catch (Exception e) {
+                    pendingFileCallback = null;
+                    return false;
+                }
+                return true;
+            }
         });
         setContentView(web);
         web.loadUrl(BASE);
+    }
+
+    @Override
+    protected void onActivityResult(int req, int result, Intent data) {
+        super.onActivityResult(req, result, data);
+        if (req != REQ_FILE_CHOOSER || pendingFileCallback == null) return;
+        Uri[] uris = null;
+        if (result == RESULT_OK && data != null && data.getData() != null) {
+            uris = new Uri[] {data.getData()};
+        }
+        pendingFileCallback.onReceiveValue(uris);
+        pendingFileCallback = null;
     }
 
     @Override

@@ -273,6 +273,39 @@ wireInfoButton(
   'Estimate height for untagged bridges',
   true,
 );
+wireInfoButton(
+  'connectors-info-offline',
+  'connectors-info-text',
+  'Informal street crossings',
+  true,
+);
+wireInfoButton(
+  'estimate-bridge-height-info-offline',
+  'estimate-bridge-height-info-text',
+  'Estimate height for untagged bridges',
+  true,
+);
+
+/**
+ * The two settings baked into a graph built from a downloaded area also show
+ * under Offline areas; either copy drives the other. Programmatic .checked
+ * writes fire no events, so the hash restore resyncs by hand.
+ */
+const graphToggleMirrors: [HTMLInputElement, HTMLInputElement][] = [
+  [connectorsToggle, document.getElementById('connectors-toggle-offline') as HTMLInputElement],
+  [
+    estimateBridgeHeightToggle,
+    document.getElementById('estimate-bridge-height-offline') as HTMLInputElement,
+  ],
+];
+function syncGraphToggleMirrors(): void {
+  for (const [primary, copy] of graphToggleMirrors) copy.checked = primary.checked;
+}
+for (const [primary, copy] of graphToggleMirrors) {
+  copy.checked = primary.checked;
+  primary.addEventListener('change', () => (copy.checked = primary.checked));
+  copy.addEventListener('change', () => (primary.checked = copy.checked));
+}
 
 /**
  * Enter means Find course, but only where nothing else already answers it: a
@@ -1103,6 +1136,7 @@ function readUrlState(): void {
   flag('sa', startAnywhereToggle);
   flag('conn', connectorsToggle);
   flag('ebh', estimateBridgeHeightToggle);
+  syncGraphToggleMirrors();
   flag('tr', useTraces);
   reflectUseTraces();
   const alg = get('alg', 'beam');

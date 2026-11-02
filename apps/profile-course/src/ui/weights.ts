@@ -94,6 +94,20 @@ export function initWeightControls(): void {
     box.addEventListener('input', () => {
       slider.value = box.value;
     });
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'weight-reset';
+    reset.textContent = '↺';
+    reset.title = `Reset to default (${box.defaultValue})`;
+    reset.setAttribute('aria-label', `Reset to default, ${box.defaultValue}`);
+    reset.addEventListener('click', () => {
+      if (box.disabled) return;
+      box.value = box.defaultValue;
+      // Through the box's own event so the slider sync and any listener run.
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    slider.insertAdjacentElement('afterend', reset);
   }
   for (const b of document.querySelectorAll<HTMLButtonElement>('.info-button')) {
     const info = WEIGHT_INFO[b.dataset.weight ?? ''];

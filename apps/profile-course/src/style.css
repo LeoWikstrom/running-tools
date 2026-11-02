@@ -300,6 +300,16 @@ details.section[open]::details-content {
   height: 20px;
 }
 
+/* ↺ beside each weight's slider, back to the default value. */
+.weight-reset {
+  flex: none;
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
 /* ⓘ: hover says it on desktop, a tap opens the same text as a dialog. */
 .info-button {
   width: 24px;
