@@ -3,6 +3,11 @@ import { get, set } from 'idb-keyval';
 const hasIdb = typeof indexedDB !== 'undefined';
 const memory = new Map<string, unknown>();
 
+/** Test helper: the in-memory fallback otherwise persists across a test file. */
+export function cacheClearMemory(): void {
+  memory.clear();
+}
+
 export async function cacheGet<T>(key: string): Promise<T | undefined> {
   if (!hasIdb) return memory.get(key) as T | undefined;
   try {

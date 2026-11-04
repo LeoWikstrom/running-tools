@@ -1,6 +1,8 @@
 import { haversineMeters } from '../geo';
 import { findCoveringArea, loadArea } from './areaStore';
 import { cacheGet, cacheSet } from './cache';
+// Benign cycle: networkTiles uses overpass helpers inside functions only.
+import { fetchNetworkTiles } from './networkTiles';
 import { createElementScanner } from './overpassStream';
 import type { LatLon } from '../geo';
 
@@ -31,7 +33,7 @@ const ENDPOINTS = [
   'https://overpass.kumi.systems/api/interpreter',
 ];
 
-const RUNNABLE_HIGHWAYS =
+export const RUNNABLE_HIGHWAYS =
   'footway|path|track|cycleway|residential|living_street|unclassified|tertiary|service|pedestrian|steps|bridleway';
 
 // Driveways and parking aisles are filtered client-side in buildGraph; a
@@ -409,6 +411,11 @@ export async function getNetwork(
       return { response: filterByRadius(stored, center, radiusMeters), source: 'offline-area' };
     }
   }
+  // Pre-baked tiles answer inside their covered box; Overpass otherwise.
+  const tiled = await fetchNetworkTiles(center, radiusMeters, {
+    fetchFn: options.fetchFn,
+  }).catch(() => null);
+  if (tiled) return { response: tiled, source: 'cache-or-network' };
   return {
     response: await fetchNetwork(center, radiusMeters, options),
     source: 'cache-or-network',

@@ -1,0 +1,60 @@
+name: Refresh network tiles
+
+# Bakes the Swedish runnable-path network (Geofabrik extract, ODbL) into
+# fixed-grid JSON tiles on the orphan `network-tiles` branch, which
+# raw.githubusercontent.com serves with CORS * and transparent gzip — the
+# apps' area downloads become CDN fetches inside Sweden, with Overpass as
+# the fallback everywhere else. Monthly: paths change slowly, and the tiles
+# carry their generated date.
+
+on:
+  schedule:
+    - cron: '30 3 2 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: network-tiles
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install osmium
+        run: sudo apt-get update && sudo apt-get install -y osmium-tool
+      - name: Download and filter the Sweden extract
+        run: |
+          curl -fsSL -o sweden.osm.pbf https://download.geofabrik.de/europe/sweden-latest.osm.pbf
+          ls -l sweden.osm.pbf
+          # Broad filter; keepWay in the tiler applies buildQuery's precise
+          # clause logic (osmium cannot express the access/foot negations).
+          osmium tags-filter sweden.osm.pbf \
+            w/highway w/barrier w/railway w/waterway \
+            -o filtered.pbf
+          osmium cat --object-type n -f opl filtered.pbf -o nodes.opl
+          osmium cat --object-type w -f opl filtered.pbf -o ways.opl
+          ls -l filtered.pbf nodes.opl ways.opl
+      - name: Build tiles
+        env:
+          NODE_OPTIONS: --max-old-space-size=12288
+        run: npx tsx scripts/build-network-tiles.ts nodes.opl ways.opl tiles
+      - name: Publish to the network-tiles branch
+        # Same pattern as the Pages workflow's `deployed` branch: a fresh
+        # single-commit orphan branch force-pushed, so the branch never grows.
+        run: |
+          cd tiles
+          git init -b network-tiles
+          git add -A
+          git -c user.name=actions -c user.email=actions@github.com \
+            commit -m "network tiles $GITHUB_SHA"
+          git push --force \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" network-tiles
