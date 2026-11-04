@@ -52,6 +52,57 @@ export function buildQuery(center: LatLon, radiusMeters: number): string {
   );
 }
 
+export interface QueryBBox {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+/** The same clauses and filters as buildQuery, over a bbox instead of a
+    circle — the unit of the quadrant-parallel area download. */
+export function buildQueryBBox(bbox: QueryBBox): string {
+  const b = `(${bbox.south.toFixed(6)},${bbox.west.toFixed(6)},${bbox.north.toFixed(6)},${bbox.east.toFixed(6)})`;
+  return (
+    `[out:json][timeout:180];(` +
+    `way[highway~"^(${RUNNABLE_HIGHWAYS})$"][access!~"private|no"][foot!=no]${b};` +
+    `way[barrier]${b};` +
+    `way[railway~"^(rail|tram|light_rail)$"]${b};` +
+    `way[waterway~"^(river|stream|canal|ditch)$"]${b};` +
+    `);out body;>;out body qt;`
+  );
+}
+
+/** The circle's bounding box split at the center into NE/NW/SE/SW. */
+export function quadrantBoxes(center: LatLon, radiusMeters: number): QueryBBox[] {
+  const latPad = radiusMeters / 111_320;
+  const lonPad = latPad / Math.cos((center.lat * Math.PI) / 180);
+  const { lat, lon } = center;
+  return [
+    { south: lat, west: lon, north: lat + latPad, east: lon + lonPad },
+    { south: lat, west: lon - lonPad, north: lat + latPad, east: lon },
+    { south: lat - latPad, west: lon, north: lat, east: lon + lonPad },
+    { south: lat - latPad, west: lon - lonPad, north: lat, east: lon },
+  ];
+}
+
+/** Union of responses with elements deduped by type+id, first wins. A way
+    matched in two quadrants arrives complete (with all its nodes) in both,
+    so dropping the second copy loses nothing. */
+export function mergeOverpassResponses(responses: readonly OverpassResponse[]): OverpassResponse {
+  const seen = new Set<string>();
+  const elements: (OverpassNode | OverpassWay)[] = [];
+  for (const r of responses) {
+    for (const el of r.elements) {
+      const key = `${el.type}:${el.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      elements.push(el);
+    }
+  }
+  return { elements };
+}
+
 function cacheKey(center: LatLon, radiusMeters: number): string {
   return `overpass:v4:${center.lat.toFixed(3)},${center.lon.toFixed(3)},${Math.round(radiusMeters / 100)}`;
 }
@@ -71,6 +122,9 @@ export interface FetchNetworkOptions {
   /** Go to the network even when the key is cached (the fresh result still
       overwrites the cache) — for stale-while-revalidate refreshes. */
   skipCacheRead?: boolean;
+  /** Don't store the response either — for quadrant sub-fetches whose merged
+      whole is cached under the real key instead. */
+  skipCacheWrite?: boolean;
   /**
    * Called with each response element as it arrives, so the caller can use
    * the first lines of a big answer while the rest still downloads. With
@@ -80,6 +134,12 @@ export interface FetchNetworkOptions {
    */
   onElement?: (el: Record<string, unknown>) => void;
   onStreamRestart?: () => void;
+  /** Endpoint indices to try, in order (default: all). The quadrant-parallel
+      download hands each quadrant a different rotation so concurrent
+      quadrants never queue on the same mirror. */
+  endpoints?: number[];
+  /** Concurrent attempts per group (default 2). 1 = no racing. */
+  race?: number;
 }
 
 const HEADER_TIMEOUT_MS = 25_000;
@@ -174,6 +234,51 @@ export async function fetchNetwork(
   return fetchOverpass(buildQuery(center, radiusMeters), cacheKey(center, radiusMeters), options);
 }
 
+/**
+ * The deliberate area download, four quadrants fetched concurrently with a
+ * different mirror rotation each — four queue tickets on four servers, all of
+ * them useful work, same instantaneous load as a pair-raced single query.
+ * Mirrors can hold slightly different OSM versions, so quadrants may mix
+ * versions; the union of all nodes keeps every way reference resolvable.
+ * One quadrant exhausting its rounds fails the whole download — a partial
+ * network would silently corrupt the graph.
+ */
+export async function fetchNetworkParallel(
+  center: LatLon,
+  radiusMeters: number,
+  options: FetchNetworkOptions = {},
+): Promise<OverpassResponse> {
+  const cached = options.skipCacheRead
+    ? null
+    : await cacheGet<OverpassResponse>(cacheKey(center, radiusMeters));
+  if (cached) return cached;
+
+  const boxes = quadrantBoxes(center, radiusMeters);
+  const bytes = [0, 0, 0, 0];
+  const responses = await Promise.all(
+    boxes.map((box, q) =>
+      fetchOverpass(buildQueryBBox(box), `overpass:quadrant:${q}`, {
+        ...options,
+        skipCacheRead: true,
+        skipCacheWrite: true,
+        endpoints: ENDPOINTS.map((_, i) => (q + i) % ENDPOINTS.length),
+        race: 1,
+        onBytes: options.onBytes
+          ? (b, endpoint) => {
+              bytes[q] = b;
+              options.onBytes!(bytes.reduce((a, x) => a + x, 0), endpoint);
+            }
+          : undefined,
+        onElement: undefined,
+        onStreamRestart: undefined,
+      }),
+    ),
+  );
+  const merged = filterByRadius(mergeOverpassResponses(responses), center, radiusMeters);
+  await cacheSet(cacheKey(center, radiusMeters), merged);
+  return merged;
+}
+
 /** Run any Overpass query through the cache, mirror and retry machinery. */
 export async function fetchOverpass(
   query: string,
@@ -258,22 +363,22 @@ export async function fetchOverpass(
   // Mirrors race in pairs: the dispatcher queue is a per-server lottery
   // (measured 50–80 s on an idle-payload query), so two tickets roughly
   // halve the expected wait. Pairs, not all four at once — we are a guest.
-  const RACE = 2;
+  const order = options.endpoints ?? ENDPOINTS.map((_, i) => i);
+  const race = options.race ?? 2;
   for (let round = 0; round < rounds; round++) {
     if (round > 0) {
       const backoff = 2_000 * 2 ** (round - 1);
       await new Promise((resolve) => setTimeout(resolve, Math.max(backoff, retryAfterMs)));
       retryAfterMs = 0;
     }
-    for (let i = 0; i < ENDPOINTS.length; i += RACE) {
-      const group: number[] = [];
-      for (let j = i; j < Math.min(i + RACE, ENDPOINTS.length); j++) group.push(j);
+    for (let i = 0; i < order.length; i += race) {
+      const group = order.slice(i, i + race);
       const controllers = group.map(() => new AbortController());
       try {
         const json = await Promise.any(group.map((j, g) => attempt(j, controllers[g]!)));
         settled = true;
         for (const c of controllers) c.abort(new Error('another mirror answered first'));
-        await cacheSet(key, json);
+        if (!options.skipCacheWrite) await cacheSet(key, json);
         return json;
       } catch (err) {
         lastError = err instanceof AggregateError ? (err.errors[err.errors.length - 1] ?? err) : err;

@@ -11,7 +11,7 @@ import { deleteArea, listAreas, saveArea } from '@running/core/net/areaStore';
 import { deleteTraces, listTraces, loadTraceCounts, saveTraces } from '@running/core/net/traceStore';
 import { fetchTracePoints } from '@running/core/net/traces';
 import { applyTraceCoverage } from '@running/core/graph/traces';
-import { fetchNetwork, getNetwork } from '@running/core/net/overpass';
+import { fetchNetworkParallel, getNetwork } from '@running/core/net/overpass';
 import { TerrainSampler } from '@running/core/net/terrain';
 import { haversineMeters } from '@running/core/geo';
 import type { TargetProfile } from '@running/core/gpx/profile';
@@ -81,7 +81,8 @@ async function downloadArea(center: LatLon, radiusMeters: number): Promise<void>
   const km2 = Math.PI * (radiusMeters / 1000) ** 2;
   const estBytes = Math.max(2e6, km2 * 0.3e6);
   let lastPosted = 0;
-  const response = await fetchNetwork(center, radiusMeters, {
+  // Parallel: four quadrants on four mirrors — four queue tickets, all useful.
+  const response = await fetchNetworkParallel(center, radiusMeters, {
     rounds: 4,
     // A deliberate download may wait as long as the query's own [timeout:180];
     // a big area takes the server that long to compute before headers arrive.

@@ -24,7 +24,7 @@ import {
 } from '@running/core/net/areaStore';
 import { buildBuildingIndex, type BuildingIndex, type BuildingPoly } from '@running/core/geo/los';
 import { fetchAreaBuildings, fetchBuildings } from '@running/core/poi/buildings';
-import { fetchNetwork } from '@running/core/net/overpass';
+import { fetchNetworkParallel } from '@running/core/net/overpass';
 import { BUILDINGS_CORRIDOR_M, fetchCandidates, searchPlacesByName } from './places';
 import {
   fetchAreaCandidates,
@@ -1549,7 +1549,8 @@ async function downloadArea(
   onStatus: (text: string) => void,
 ): Promise<void> {
   onStatus('Downloading the path network… this can take a while.');
-  const response = await fetchNetwork(center, radiusM, { headerTimeoutMs: 120_000 });
+  // Parallel: four quadrants on four mirrors — four queue tickets, all useful.
+  const response = await fetchNetworkParallel(center, radiusM, { headerTimeoutMs: 120_000 });
   const area = await saveArea(center, radiusM, response);
   onStatus('Network saved. Fetching the places in the area…');
   try {
