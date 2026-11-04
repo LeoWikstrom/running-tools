@@ -72,7 +72,10 @@ export interface BBox {
  * one query. Seeded from nearby ways then rel(bw) — the direct
  * relation[...](bbox) form makes Overpass geometry-check every route on the
  * planet and routinely times out at the dispatcher. Tram tracks are railway,
- * not highway, hence the union seed.
+ * not highway, hence the union seed. Deliberately NOT split into a tags-only
+ * list + per-line geometry: the dispatcher queue, not the payload, dominates
+ * the wait, so a second fetch per picked line felt far worse (tried and
+ * reverted 2026-11-04).
  */
 export function buildBusAreaQuery(bbox: BBox): string {
   const b = `(${bbox.south.toFixed(5)},${bbox.west.toFixed(5)},${bbox.north.toFixed(5)},${bbox.east.toFixed(5)})`;
@@ -81,7 +84,10 @@ export function buildBusAreaQuery(bbox: BBox): string {
     `way[highway]${b};` +
     `way[railway~"^(tram|light_rail)$"]${b};` +
     `);rel(bw)[type=route][route~"^(bus|tram)$"]->.rt;` +
-    `.rt out body;way(r.rt);out geom;node(r.rt);out body;`
+    // Output order is streaming order: relations (the list), then stop nodes
+    // (small), then way geometry (the bulk) — so a streaming reader can show
+    // the list and complete lines one by one while the geometry downloads.
+    `.rt out body;node(r.rt);out body;way(r.rt);out geom;`
   );
 }
 
@@ -146,6 +152,13 @@ function relationStops(
   return stops.length > 0 ? stops : pick((role) => role.startsWith('platform'));
 }
 
+function byRef(a: BusLine, b: BusLine): number {
+  const na = Number(a.ref);
+  const nb = Number(b.ref);
+  if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+  return a.ref.localeCompare(b.ref) || a.name.localeCompare(b.name);
+}
+
 /** Turn one bus-area response into ready-to-preview lines, sorted by ref. */
 export function parseBusLines(elements: BusAreaElement[]): BusLineData[] {
   const ways = new Map<number, OverpassGeomWay>();
@@ -164,12 +177,7 @@ export function parseBusLines(elements: BusAreaElement[]): BusLineData[] {
     if (points.length < 2) continue;
     out.push({ ...line, points, gaps, stops: relationStops(r, nodes) });
   }
-  out.sort((a, b) => {
-    const na = Number(a.ref);
-    const nb = Number(b.ref);
-    if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
-    return a.ref.localeCompare(b.ref) || a.name.localeCompare(b.name);
-  });
+  out.sort(byRef);
   return out;
 }
 

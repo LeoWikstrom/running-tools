@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { haversineMeters } from '../src/geo';
 import {
   assembleRoutePolyline,
+  buildBusAreaQuery,
   buildBusSearchQuery,
   cropBetweenStops,
   parseBusLines,
@@ -188,8 +189,23 @@ describe('parseBusLines', () => {
   });
 });
 
+describe('buildBusAreaQuery', () => {
+  it('outputs relations, member geometry and stop nodes via the named set', () => {
+    const q = buildBusAreaQuery({ south: 57.6, west: 11.9, north: 57.8, east: 12.1 });
+    expect(q).toContain('.rt out body');
+    expect(q).toContain('way(r.rt);out geom');
+    expect(q).toContain('node(r.rt);out body');
+  });
+});
+
 describe('buildBusSearchQuery', () => {
   const bbox = { south: 57.6, west: 11.9, north: 57.8, east: 12.1 };
+
+  it('outputs full line data via the named set', () => {
+    const q = buildBusSearchQuery(bbox, '16');
+    expect(q).toContain('way(r.rt);out geom');
+    expect(q).toContain('node(r.rt);out body');
+  });
 
   it('narrows the route filter when a kind is given', () => {
     expect(buildBusSearchQuery(bbox, '3', 'tram')).toContain('route~"^tram$"');

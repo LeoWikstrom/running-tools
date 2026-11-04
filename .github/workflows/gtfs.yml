@@ -1,0 +1,46 @@
+name: Refresh GTFS bus lines
+
+# Bakes Trafiklab's GTFS Regional feed (CC0) into site/gtfs/<feed>.json for
+# the BusTour picker — instant line lists instead of minute-long Overpass
+# queries. Weekly is plenty: lines and stops change at timetable shifts.
+# Needs the TRAFIKLAB_GTFS_KEY repository secret (a free key for the
+# "GTFS Regional" static API from trafiklab.se).
+
+on:
+  schedule:
+    - cron: '30 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gtfs
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build line JSON
+        env:
+          TRAFIKLAB_GTFS_KEY: ${{ secrets.TRAFIKLAB_GTFS_KEY }}
+        run: npx tsx scripts/build-gtfs-lines.ts vt
+      - name: Commit if changed
+        # The push to main triggers the Pages workflow, which deploys the new
+        # JSON together with the site.
+        run: |
+          if git diff --quiet site/gtfs; then
+            echo "no changes"
+            exit 0
+          fi
+          git add site/gtfs
+          git -c user.name=actions -c user.email=actions@github.com \
+            commit -m "GTFS bus lines refresh"
+          git push

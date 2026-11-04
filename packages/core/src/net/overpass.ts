@@ -1,6 +1,7 @@
 import { haversineMeters } from '../geo';
 import { findCoveringArea, loadArea } from './areaStore';
 import { cacheGet, cacheSet } from './cache';
+import { createElementScanner } from './overpassStream';
 import type { LatLon } from '../geo';
 
 export interface OverpassNode {
@@ -67,6 +68,18 @@ export interface FetchNetworkOptions {
    * should allow up to the query's own [timeout:180].
    */
   headerTimeoutMs?: number;
+  /** Go to the network even when the key is cached (the fresh result still
+      overwrites the cache) — for stale-while-revalidate refreshes. */
+  skipCacheRead?: boolean;
+  /**
+   * Called with each response element as it arrives, so the caller can use
+   * the first lines of a big answer while the rest still downloads. With
+   * racing mirrors only the first body to start streaming emits; if that
+   * mirror then dies mid-body, onStreamRestart fires and a later attempt
+   * emits from the top — the caller must drop its partial state.
+   */
+  onElement?: (el: Record<string, unknown>) => void;
+  onStreamRestart?: () => void;
 }
 
 const HEADER_TIMEOUT_MS = 25_000;
@@ -115,6 +128,7 @@ async function readWithProgress(
   controller: AbortController,
   onBytes: ((bytes: number, endpoint: number) => void) | undefined,
   endpoint: number,
+  onElement?: (el: Record<string, unknown>) => void,
 ): Promise<OverpassResponse> {
   if (!res.body) return (await res.json()) as OverpassResponse;
   // A big area on a slow link can legitimately stream for many minutes, so
@@ -126,6 +140,8 @@ async function readWithProgress(
   let timer = setTimeout(stall, BODY_STALL_MS);
   try {
     const reader = res.body.getReader();
+    const scanner = onElement ? createElementScanner(onElement) : null;
+    const decoder = scanner ? new TextDecoder() : null;
     const chunks: Uint8Array[] = [];
     let received = 0;
     for (;;) {
@@ -136,6 +152,7 @@ async function readWithProgress(
       chunks.push(value);
       received += value.byteLength;
       onBytes?.(received, endpoint);
+      scanner?.push(decoder!.decode(value, { stream: true }));
     }
     const all = new Uint8Array(received);
     let offset = 0;
@@ -164,8 +181,10 @@ export async function fetchOverpass(
   options: FetchNetworkOptions = {},
 ): Promise<OverpassResponse> {
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
-  const cached = await cacheGet<OverpassResponse>(key);
-  if (cached) return cached;
+  if (!options.skipCacheRead) {
+    const cached = await cacheGet<OverpassResponse>(key);
+    if (cached) return cached;
+  }
 
   let lastError: unknown = null;
   // The public servers reject or hang individually and intermittently (quick
@@ -175,52 +194,89 @@ export async function fetchOverpass(
   // and nothing sleeps after the final round.
   const rounds = options.rounds ?? 2;
   let retryAfterMs = 0;
+
+  // With racing mirrors, only the first body to start streaming emits
+  // elements — a second concurrent body would interleave duplicates.
+  let streamOwner: number | null = null;
+  // Once a result is in, an aborted loser's death must not read as a restart.
+  let settled = false;
+
+  const attempt = async (i: number, controller: AbortController): Promise<OverpassResponse> => {
+    // Fast-fail if no response headers arrive; dead mirrors otherwise
+    // stall the whole search. Overpass computes the full result before
+    // sending headers, so callers may widen this for heavy queries.
+    const headerTimeout = options.headerTimeoutMs ?? HEADER_TIMEOUT_MS;
+    const timer = setTimeout(
+      () =>
+        controller.abort(
+          new Error(`Overpass sent no response headers within ${headerTimeout / 1000} s`),
+        ),
+      headerTimeout,
+    );
+    let res;
+    try {
+      res = await fetchFn(ENDPOINTS[i]!, {
+        method: 'POST',
+        body: `data=${encodeURIComponent(query)}`,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) {
+      const after = Number(res.headers.get('retry-after'));
+      if (Number.isFinite(after) && after > 0) {
+        retryAfterMs = Math.max(retryAfterMs, Math.min(after, 60) * 1000);
+      }
+      throw new Error(`Overpass ${ENDPOINTS[i]} returned ${res.status}`);
+    }
+    const emits = options.onElement !== undefined && streamOwner === null;
+    if (emits) streamOwner = i;
+    try {
+      const json = await readWithProgress(
+        res,
+        controller,
+        options.onBytes,
+        i,
+        emits ? options.onElement : undefined,
+      );
+      if (!Array.isArray(json.elements)) {
+        throw new Error(`Overpass ${ENDPOINTS[i]} returned no elements`);
+      }
+      return json;
+    } catch (err) {
+      if (emits && !settled) {
+        // The emitting body died partway; whoever answers next starts over.
+        streamOwner = null;
+        options.onStreamRestart?.();
+      }
+      throw err;
+    }
+  };
+
+  // Mirrors race in pairs: the dispatcher queue is a per-server lottery
+  // (measured 50–80 s on an idle-payload query), so two tickets roughly
+  // halve the expected wait. Pairs, not all four at once — we are a guest.
+  const RACE = 2;
   for (let round = 0; round < rounds; round++) {
     if (round > 0) {
       const backoff = 2_000 * 2 ** (round - 1);
       await new Promise((resolve) => setTimeout(resolve, Math.max(backoff, retryAfterMs)));
       retryAfterMs = 0;
     }
-    for (let i = 0; i < ENDPOINTS.length; i++) {
+    for (let i = 0; i < ENDPOINTS.length; i += RACE) {
+      const group: number[] = [];
+      for (let j = i; j < Math.min(i + RACE, ENDPOINTS.length); j++) group.push(j);
+      const controllers = group.map(() => new AbortController());
       try {
-        const controller = new AbortController();
-        // Fast-fail if no response headers arrive; dead mirrors otherwise
-        // stall the whole search. Overpass computes the full result before
-        // sending headers, so callers may widen this for heavy queries.
-        const headerTimeout = options.headerTimeoutMs ?? HEADER_TIMEOUT_MS;
-        const timer = setTimeout(
-          () =>
-            controller.abort(
-              new Error(`Overpass sent no response headers within ${headerTimeout / 1000} s`),
-            ),
-          headerTimeout,
-        );
-        let res;
-        try {
-          res = await fetchFn(ENDPOINTS[i]!, {
-            method: 'POST',
-            body: `data=${encodeURIComponent(query)}`,
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            signal: controller.signal,
-          });
-        } finally {
-          clearTimeout(timer);
-        }
-        if (!res.ok) {
-          const after = Number(res.headers.get('retry-after'));
-          if (Number.isFinite(after) && after > 0) {
-            retryAfterMs = Math.max(retryAfterMs, Math.min(after, 60) * 1000);
-          }
-          throw new Error(`Overpass ${ENDPOINTS[i]} returned ${res.status}`);
-        }
-        const json = await readWithProgress(res, controller, options.onBytes, i);
-        if (!Array.isArray(json.elements)) {
-          throw new Error(`Overpass ${ENDPOINTS[i]} returned no elements`);
-        }
+        const json = await Promise.any(group.map((j, g) => attempt(j, controllers[g]!)));
+        settled = true;
+        for (const c of controllers) c.abort(new Error('another mirror answered first'));
         await cacheSet(key, json);
         return json;
       } catch (err) {
-        lastError = err;
+        lastError = err instanceof AggregateError ? (err.errors[err.errors.length - 1] ?? err) : err;
       }
     }
   }
