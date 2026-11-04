@@ -42,7 +42,10 @@ async function eachLine(path: string, onLine: (line: string) => void): Promise<v
 }
 
 // Pass 1 — nodes. Coordinates in flat typed arrays; tags only where present.
-const nodeIndex = new Map<number, number>();
+// The id index is sharded: a single Map tops out at ~16.7M entries and the
+// Swedish network holds more nodes than that.
+const SHARDS = 64;
+const nodeShards = Array.from({ length: SHARDS }, () => new Map<number, number>());
 let lats = new Float64Array(1 << 20);
 let lons = new Float64Array(1 << 20);
 const nodeTags = new Map<number, Record<string, string>>();
@@ -59,7 +62,7 @@ await eachLine(nodesPath, (line) => {
     grownLons.set(lons);
     lons = grownLons;
   }
-  nodeIndex.set(el.id, nodeCount);
+  nodeShards[el.id % SHARDS]!.set(el.id, nodeCount);
   lats[nodeCount] = el.lat;
   lons[nodeCount] = el.lon;
   nodeCount++;
@@ -68,7 +71,7 @@ await eachLine(nodesPath, (line) => {
 console.log(`${nodeCount} nodes read`);
 
 const nodePos = (id: number): { lat: number; lon: number } | undefined => {
-  const i = nodeIndex.get(id);
+  const i = nodeShards[id % SHARDS]!.get(id);
   return i === undefined ? undefined : { lat: lats[i]!, lon: lons[i]! };
 };
 

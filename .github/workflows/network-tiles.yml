@@ -35,10 +35,15 @@ jobs:
         run: |
           curl -fsSL -o sweden.osm.pbf https://download.geofabrik.de/europe/sweden-latest.osm.pbf
           ls -l sweden.osm.pbf
-          # Broad filter; keepWay in the tiler applies buildQuery's precise
-          # clause logic (osmium cannot express the access/foot negations).
+          # Value-exact filter (a broad w/highway pulled >16.7M nodes, past a
+          # JS Map's limit); keepWay in the tiler still applies buildQuery's
+          # precise clause logic (the access/foot negations osmium cannot
+          # express).
           osmium tags-filter sweden.osm.pbf \
-            w/highway w/barrier w/railway w/waterway \
+            w/highway=footway,path,track,cycleway,residential,living_street,unclassified,tertiary,service,pedestrian,steps,bridleway \
+            w/barrier \
+            w/railway=rail,tram,light_rail \
+            w/waterway=river,stream,canal,ditch \
             -o filtered.pbf
           osmium cat --object-type n -f opl filtered.pbf -o nodes.opl
           osmium cat --object-type w -f opl filtered.pbf -o ways.opl
