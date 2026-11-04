@@ -1,14 +1,15 @@
 name: Refresh GTFS bus lines
 
-# Bakes Trafiklab's GTFS Regional feed (CC0) into site/gtfs/<feed>.json for
+# Bakes Trafiklab's GTFS Regional feeds (CC0) into site/gtfs/<feed>.json for
 # the BusTour picker — instant line lists instead of minute-long Overpass
-# queries. Weekly is plenty: lines and stops change at timetable shifts.
+# queries. Monthly is plenty (lines and stops change at timetable shifts) and
+# keeps all the feeds inside the Bronze key's 50 static calls/month.
 # Needs the TRAFIKLAB_GTFS_KEY repository secret (a free key for the
 # "GTFS Regional" static API from trafiklab.se).
 
 on:
   schedule:
-    - cron: '30 4 * * 1'
+    - cron: '30 4 1 * *'
   workflow_dispatch:
 
 permissions:
@@ -28,10 +29,25 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Build line JSON
+      - name: Build line JSON for every county operator
         env:
           TRAFIKLAB_GTFS_KEY: ${{ secrets.TRAFIKLAB_GTFS_KEY }}
-        run: npx tsx scripts/build-gtfs-lines.ts vt
+        # The 21 regional operators from the GTFS Regional operator table —
+        # long-distance coaches, trains and ferries are deliberately left
+        # out. Keep this list in step with GTFS_FEEDS in apps/runtour/src/bus.ts.
+        # One operator failing must not lose the rest of the refresh.
+        run: |
+          failed=""
+          for feed in sl ul sormland otraf jlt krono klt gotland blekinge \
+                      skane halland vt varm orebro vastmanland dt xt dintur \
+                      jamtland vasterbotten norrbotten; do
+            echo "::group::$feed"
+            npx tsx scripts/build-gtfs-lines.ts "$feed" || failed="$failed $feed"
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::warning::feeds failed:$failed"
+          fi
       - name: Commit if changed
         # The push to main triggers the Pages workflow, which deploys the new
         # JSON together with the site.

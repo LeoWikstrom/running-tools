@@ -12,7 +12,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -163,6 +163,17 @@ console.log(`${shapes.size} shapes`);
 
 const result = assembleGtfsLines(feed, reps, stopIdsByTrip, stops, shapes);
 await mkdir(new URL('../site/gtfs/', import.meta.url).pathname, { recursive: true });
+// Only the `generated` stamp differs on an unchanged month; don't churn git.
+try {
+  const previous = JSON.parse(await readFile(outPath, 'utf8')) as typeof result;
+  if (JSON.stringify({ ...previous, generated: result.generated }) === JSON.stringify(result)) {
+    console.log(`${outPath} unchanged — not rewritten`);
+    if (!process.env.GTFS_ZIP) await unlink(zip).catch(() => undefined);
+    process.exit(0);
+  }
+} catch {
+  // No previous file (or unreadable) — write.
+}
 const json = JSON.stringify(result);
 await writeFile(outPath, json);
 console.log(`wrote ${outPath}: ${result.lines.length} lines, ${(json.length / 1e6).toFixed(1)} MB`);

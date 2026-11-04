@@ -59,31 +59,52 @@ const areaKey = (bbox: BBox): string =>
   `${bbox.north.toFixed(3)},${bbox.east.toFixed(3)}`;
 
 /**
- * Prebuilt GTFS line files (scripts/build-gtfs-lines.ts, refreshed weekly by
- * CI): the whole operator's lines in one static JSON — instant and gapless
+ * Prebuilt GTFS line files (scripts/build-gtfs-lines.ts, refreshed monthly
+ * by CI): a whole operator's lines in one static JSON — instant and gapless
  * where a feed covers the view; Overpass remains the path everywhere else.
- * The relative URL serves whichever host the app is deployed on (github.io,
- * eq2.se/apps/); the absolute one covers the dev server and the APK.
+ * One feed per county operator; the bboxes are generous county gates, and
+ * overlapping candidates are merged, so a view near a border (or inside two
+ * boxes, like Uppsala in both SL's and UL's) sees every operator's lines.
  */
 const GTFS_FEEDS = [
-  {
-    id: 'vt', // Västtrafik ≈ Västra Götaland
-    bbox: { south: 56.8, west: 10.8, north: 59.5, east: 15.0 },
-    urls: ['../gtfs/vt.json', 'https://leowikstrom.github.io/running-tools/gtfs/vt.json'],
-  },
+  { id: 'sl', bbox: { south: 58.7, west: 17.2, north: 60.3, east: 19.3 } },
+  { id: 'ul', bbox: { south: 59.4, west: 16.6, north: 60.7, east: 18.9 } },
+  { id: 'sormland', bbox: { south: 58.5, west: 15.5, north: 59.6, east: 17.7 } },
+  { id: 'otraf', bbox: { south: 57.7, west: 14.5, north: 59.0, east: 17.1 } },
+  { id: 'jlt', bbox: { south: 56.8, west: 13.0, north: 58.2, east: 15.6 } },
+  { id: 'krono', bbox: { south: 56.3, west: 13.3, north: 57.3, east: 15.9 } },
+  { id: 'klt', bbox: { south: 56.1, west: 15.3, north: 58.2, east: 17.3 } },
+  { id: 'gotland', bbox: { south: 56.8, west: 17.9, north: 58.0, east: 19.4 } },
+  { id: 'blekinge', bbox: { south: 55.9, west: 14.3, north: 56.6, east: 16.1 } },
+  { id: 'skane', bbox: { south: 55.2, west: 12.4, north: 56.6, east: 14.7 } },
+  { id: 'halland', bbox: { south: 56.3, west: 11.8, north: 57.7, east: 13.4 } },
+  { id: 'vt', bbox: { south: 56.8, west: 10.8, north: 59.5, east: 15.0 } },
+  { id: 'varm', bbox: { south: 58.7, west: 11.7, north: 61.1, east: 14.5 } },
+  { id: 'orebro', bbox: { south: 58.6, west: 14.2, north: 60.1, east: 15.8 } },
+  { id: 'vastmanland', bbox: { south: 59.2, west: 15.4, north: 60.2, east: 17.0 } },
+  { id: 'dt', bbox: { south: 59.8, west: 12.1, north: 62.3, east: 16.5 } },
+  { id: 'xt', bbox: { south: 60.1, west: 14.9, north: 62.4, east: 17.6 } },
+  { id: 'dintur', bbox: { south: 62.0, west: 14.7, north: 64.0, east: 19.3 } },
+  { id: 'jamtland', bbox: { south: 61.5, west: 11.9, north: 65.1, east: 17.1 } },
+  { id: 'vasterbotten', bbox: { south: 63.3, west: 14.3, north: 66.4, east: 21.6 } },
+  { id: 'norrbotten', bbox: { south: 64.8, west: 15.3, north: 69.1, east: 24.2 } },
 ];
 const FEED_MAX_AGE_MS = 7 * 24 * 3600_000;
 
-/** The covering feed's lines, from the cache or the static file; null when no
-    feed covers the view or the file is unreachable and nothing is cached. */
-async function feedLines(view: BBox): Promise<BusLineData[] | null> {
-  const feed = GTFS_FEEDS.find((f) => covers(f.bbox, view));
-  if (!feed) return null;
-  const key = `gtfslines:${feed.id}:v1`;
+const intersects = (a: BBox, b: BBox): boolean =>
+  a.south <= b.north && a.north >= b.south && a.west <= b.east && a.east >= b.west;
+
+/** One feed's lines from the cache or the static file; null when the file is
+    unreachable and nothing is cached. The relative URL serves whichever host
+    the app is deployed on (github.io, eq2.se/apps/); the absolute one covers
+    the dev server and the APK. */
+async function loadFeed(id: string): Promise<GtfsFeedLines | null> {
+  const key = `gtfslines:${id}:v1`;
   const stored = await cacheGet<{ savedAt: number; data: GtfsFeedLines }>(key);
   let data = stored?.data ?? null;
   if (!stored || Date.now() - stored.savedAt > FEED_MAX_AGE_MS) {
-    for (const url of feed.urls) {
+    const urls = [`../gtfs/${id}.json`, `https://leowikstrom.github.io/running-tools/gtfs/${id}.json`];
+    for (const url of urls) {
       try {
         const res = await fetch(url);
         if (!res.ok) continue;
@@ -95,8 +116,24 @@ async function feedLines(view: BBox): Promise<BusLineData[] | null> {
       }
     }
   }
-  if (!data || data.lines.length === 0) return null;
-  return data.lines.map(gtfsLineToBusLineData);
+  return data;
+}
+
+/** Every covering feed's lines merged, from caches or the static files; null
+    when no feed fully covers the view (then Overpass is the path) or none of
+    the candidates could be loaded. */
+async function feedLines(view: BBox): Promise<BusLineData[] | null> {
+  if (!GTFS_FEEDS.some((f) => covers(f.bbox, view))) return null;
+  const candidates = GTFS_FEEDS.filter((f) => intersects(f.bbox, view));
+  const loaded = await Promise.all(candidates.map((f) => loadFeed(f.id)));
+  const out: BusLineData[] = [];
+  loaded.forEach((data, feedIndex) => {
+    if (!data) return;
+    // Distinct synthetic id ranges per feed, so merged pools cannot collide.
+    const base = feedIndex * 100_000;
+    data.lines.forEach((line, i) => out.push(gtfsLineToBusLineData(line, base + i)));
+  });
+  return out.length > 0 ? out : null;
 }
 
 const covers = (outer: BBox, inner: BBox): boolean =>
