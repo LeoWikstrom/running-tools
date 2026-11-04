@@ -52,7 +52,8 @@ jobs:
         # The push to main triggers the Pages workflow, which deploys the new
         # JSON together with the site.
         run: |
-          if git diff --quiet site/gtfs; then
+          # status --porcelain, not diff: fresh feed files are untracked.
+          if [ -z "$(git status --porcelain site/gtfs)" ]; then
             echo "no changes"
             exit 0
           fi
