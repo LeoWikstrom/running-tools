@@ -60,6 +60,7 @@ jobs:
           rm -f nodes.opl ways.opl filtered.pbf
           osmium tags-filter sweden.osm.pbf w/building -o buildings.pbf
           osmium export buildings.pbf -f geojsonseq --attributes=type,id \
+            --geometry-types=polygon \
             | npx tsx scripts/build-building-tiles.ts tiles
       - name: Publish to the network-tiles branch
         # Same pattern as the Pages workflow's `deployed` branch: a fresh

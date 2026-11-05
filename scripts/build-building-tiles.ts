@@ -65,9 +65,16 @@ for await (const raw of rl) {
     const rings = g.coordinates as [number, number][][];
     addRing(fromWay ? baseId : -baseId, rings[0] ?? []);
   } else if (g.type === 'MultiPolygon') {
+    // osmium emits way-areas as single-polygon MultiPolygons with the
+    // original way id — that id must stay positive, or the LoS
+    // self-occlusion check can never match a place to its own building.
     const polys = g.coordinates as [number, number][][][];
-    for (let k = 0; k < polys.length; k++) {
-      addRing(-(baseId * 10 + k), polys[k]![0] ?? []);
+    if (fromWay && polys.length === 1) {
+      addRing(baseId, polys[0]![0] ?? []);
+    } else {
+      for (let k = 0; k < polys.length; k++) {
+        addRing(-(baseId * 10 + k), polys[k]![0] ?? []);
+      }
     }
   }
 }
