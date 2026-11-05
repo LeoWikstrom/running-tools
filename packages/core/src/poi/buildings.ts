@@ -1,6 +1,7 @@
 import { haversineMeters } from '../geo';
 import type { BuildingPoly } from '../geo/los';
-import { fetchOverpass, type FetchNetworkOptions } from '../net/overpass';
+import { fetchBuildingTiles } from '../net/buildingTiles';
+import { fetchOverpass, quadrantBoxes, type FetchNetworkOptions } from '../net/overpass';
 
 /** Overpass way from an `out geom` query: coordinates inline. */
 interface GeomWayElement {
@@ -47,17 +48,44 @@ export function elementsToBuildings(elements: GeomWayElement[]): BuildingPoly[] 
   return out;
 }
 
-/** Footprints of a whole circle, for storing beside a downloaded area. */
+/**
+ * Footprints of a whole circle, for storing beside a downloaded area.
+ * Buildings are the heaviest single layer in OSM, so like the network this
+ * fetches four bbox quadrants concurrently, each on its own mirror rotation;
+ * the corner overshoot beyond the circle is harmless for line of sight.
+ * Deduped by way id — a boundary building arrives whole in both quadrants.
+ */
 export async function fetchAreaBuildings(
   center: { lat: number; lon: number },
   radiusMeters: number,
   options: FetchNetworkOptions = {},
 ): Promise<BuildingPoly[]> {
-  const around = `(around:${Math.round(radiusMeters)},${center.lat.toFixed(6)},${center.lon.toFixed(6)})`;
-  const query = `[out:json][timeout:120];way[building]${around};out geom;`;
-  const key = `buildings:v1:area:${center.lat.toFixed(4)},${center.lon.toFixed(4)},${Math.round(radiusMeters)}`;
-  const response = await fetchOverpass(query, key, options);
-  return elementsToBuildings(response.elements as unknown as GeomWayElement[]);
+  // Pre-baked footprint tiles answer first (CDN-fast inside Sweden).
+  const tiled = await fetchBuildingTiles(center, radiusMeters, {
+    fetchFn: options.fetchFn,
+  }).catch(() => null);
+  if (tiled) return tiled;
+  const keyBase = `buildings:v2:area:${center.lat.toFixed(4)},${center.lon.toFixed(4)},${Math.round(radiusMeters)}`;
+  const responses = await Promise.all(
+    quadrantBoxes(center, radiusMeters).map((b, q) => {
+      const box = `(${b.south.toFixed(6)},${b.west.toFixed(6)},${b.north.toFixed(6)},${b.east.toFixed(6)})`;
+      return fetchOverpass(
+        `[out:json][timeout:120];way[building]${box};out geom;`,
+        `${keyBase}:q${q}`,
+        { ...options, endpoints: [0, 1, 2, 3].map((i) => (q + i) % 4), race: 1 },
+      );
+    }),
+  );
+  const seen = new Set<number>();
+  const elements: GeomWayElement[] = [];
+  for (const r of responses as unknown as { elements: GeomWayElement[] }[]) {
+    for (const el of r.elements) {
+      if (seen.has(el.id)) continue;
+      seen.add(el.id);
+      elements.push(el);
+    }
+  }
+  return elementsToBuildings(elements);
 }
 
 export async function fetchBuildings(

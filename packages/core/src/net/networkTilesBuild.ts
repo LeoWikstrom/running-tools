@@ -88,6 +88,16 @@ export function keepWay(tags: Record<string, string>): boolean {
   return false;
 }
 
+/** Every tile any of the points falls in — a boundary ring is duplicated
+    into both tiles whole, and the client dedupes by id. */
+export function coordTiles(points: readonly { lat: number; lon: number }[]): Set<string> {
+  const out = new Set<string>();
+  for (const p of points) {
+    out.add(`${Math.floor(p.lon / TILE_LON_STEP)}_${Math.floor(p.lat / TILE_LAT_STEP)}`);
+  }
+  return out;
+}
+
 /** Every tile any of the way's nodes falls in — a boundary way is duplicated
     into both tiles whole, and the client's merge dedupes it. */
 export function wayTiles(

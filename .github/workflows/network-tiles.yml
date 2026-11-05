@@ -52,6 +52,15 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=12288
         run: npx tsx scripts/build-network-tiles.ts nodes.opl ways.opl tiles
+      - name: Build building tiles
+        # Footprints ride beside the network tiles on the same branch:
+        # polyline-encoded rings, no tags, no node joining (osmium export
+        # assembles the geometry, multipolygons included).
+        run: |
+          rm -f nodes.opl ways.opl filtered.pbf
+          osmium tags-filter sweden.osm.pbf w/building -o buildings.pbf
+          osmium export buildings.pbf -f geojsonseq --attributes=type,id \
+            | npx tsx scripts/build-building-tiles.ts tiles
       - name: Publish to the network-tiles branch
         # Same pattern as the Pages workflow's `deployed` branch: a fresh
         # single-commit orphan branch force-pushed, so the branch never grows.

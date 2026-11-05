@@ -1417,6 +1417,8 @@ function openAreaPrompt(
   downloadBtn.addEventListener('click', () => {
     downloadBtn.disabled = true;
     downloadBtn.textContent = 'Downloading…';
+    // A download decides the question; "Don't show again" would only confuse.
+    never.remove();
     void downloadArea(center, Number(radiusInput.value) * 1000, (t) => {
       text.textContent = t;
       setAreaStatus(t);
@@ -1549,7 +1551,14 @@ async function downloadArea(
   radiusM: number,
   onStatus: (text: string) => void,
 ): Promise<void> {
-  onStatus('Downloading the path network… this can take a while.');
+  onStatus('Downloading the network, places and buildings…');
+  // The three downloads are independent, so they run concurrently: the wall
+  // time is the slowest of them, not the sum. Places and buildings failures
+  // stay tolerable; only the network is make-or-break for the area.
+  const placesPromise = fetchAreaCandidates(center, radiusM, langInput.value.trim().toLowerCase());
+  const buildingsPromise = fetchAreaBuildings(center, radiusM, { headerTimeoutMs: 120_000 });
+  placesPromise.catch(() => undefined);
+  buildingsPromise.catch(() => undefined);
   // Pre-baked tiles first (CDN-fast inside Sweden); otherwise Overpass with
   // four quadrants on four mirrors — four queue tickets, all useful.
   const tiled = await fetchNetworkTiles(center, radiusM, {
@@ -1558,9 +1567,9 @@ async function downloadArea(
   const response =
     tiled ?? (await fetchNetworkParallel(center, radiusM, { headerTimeoutMs: 120_000 }));
   const area = await saveArea(center, radiusM, response);
-  onStatus('Network saved. Fetching the places in the area…');
+  onStatus('Network saved. Waiting for the places…');
   try {
-    const found = await fetchAreaCandidates(center, radiusM, langInput.value.trim().toLowerCase());
+    const found = await placesPromise;
     await saveAreaPlaces(area.id, found);
     onStatus(`Area saved with ${found.length} places — courses here now generate offline.`);
     toast(`Area saved with ${found.length} places.`);
@@ -1569,8 +1578,8 @@ async function downloadArea(
     onStatus(`Network saved, but the places fetch failed (${message}) — download again.`);
   }
   try {
-    onStatus('Fetching the buildings for line of sight…');
-    const footprints = await fetchAreaBuildings(center, radiusM, { headerTimeoutMs: 120_000 });
+    onStatus('Waiting for the buildings (line of sight)…');
+    const footprints = await buildingsPromise;
     await saveAreaBuildings(area.id, footprints);
     onStatus(`Area saved: buildings too (${footprints.length}).`);
   } catch {
