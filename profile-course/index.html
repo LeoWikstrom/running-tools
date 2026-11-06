@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#c63d80" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <title>RaceTwin</title>
+    <script type="module" crossorigin src="./assets/index-EgKf9Rvm.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DZ2j3b1B.css">
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="course-tabs" role="tablist" aria-label="Courses found" hidden></div>
+    <div id="edit-bar" hidden>
+      <button id="edit-exit" title="Exit editing (Esc)" aria-label="Exit editing">✕</button>
+      <button id="edit-undo" title="Undo the last edit (Ctrl+Z)">↶ Undo</button>
+      <button
+        id="edit-nodes"
+        aria-pressed="false"
+        title="Node editing: pull a dot to move it, tap a dot to delete it, hold one to mark it, tap elsewhere to add one (N)"
+      >
+        Nodes
+      </button>
+      <button id="edit-delete" hidden title="Delete the marked points (Del)">Delete</button>
+    </div>
+    <div id="via-bar" hidden>
+      <button
+        id="via-cancel"
+        title="Stop placing a via point"
+        aria-label="Stop placing a via point"
+      >
+        ✕
+      </button>
+    </div>
+    <p id="edit-status" hidden></p>
+    <div id="map-buttons" hidden></div>
+    <div id="sheet">
+      <div id="sheet-top">
+        <div id="sheet-handle" role="button" aria-label="Resize the panel" tabindex="0"></div>
+        <button id="download-gpx" hidden title="Download GPX (G)">GPX ⤓</button>
+      </div>
+      <section id="controls">
+        <h1>RaceTwin</h1>
+        <div class="row" id="gpx-row">
+          <label class="control">
+            <span>Race GPX</span>
+            <input type="file" id="gpx-input" accept=".gpx,application/gpx+xml" />
+          </label>
+          <button id="find-button" title="Find course (Enter)" disabled>Find course</button>
+        </div>
+        <button id="cancel-button" hidden>Cancel</button>
+        <div id="target-chart"></div>
+        <p class="hint" id="gpx-stats" hidden></p>
+        <p class="hint" id="course-stats" hidden></p>
+        <details id="course-advanced" hidden>
+          <summary class="hint">Advanced stats</summary>
+          <p class="hint" id="course-advanced-body"></p>
+        </details>
+        <div class="control" id="range-control" hidden>
+          <span>Match race section: <output id="range-label"></output></span>
+          <div class="dual-slider">
+            <input type="range" id="range-from" min="0" step="0.1" value="0" aria-label="From km" />
+            <input type="range" id="range-to" min="0" step="0.1" aria-label="To km" />
+          </div>
+        </div>
+        <p class="hint" id="start-hint">Tap the map to set a start point.</p>
+
+        <div class="subgroup">
+          <h3>Course settings</h3>
+          <label class="control">
+            <span
+              >Start/finish zone: <output id="radius-value">5.0</output> km (course may leave
+              it)</span
+            >
+            <input type="range" id="radius-slider" min="1" max="10" step="0.5" value="5" />
+          </label>
+          <label class="control checkbox">
+            <input type="checkbox" id="return-toggle" />
+            <span>Return to start</span>
+          </label>
+          <label class="control">
+            <span>Course distance (km)</span>
+            <input type="number" id="distance-input" min="1" max="100" step="0.1" />
+          </label>
+          <label class="control">
+            <span>Surface</span>
+            <select id="surface-select">
+              <option value="road" selected>Road race (paved/gravel)</option>
+              <option value="gravel">Gravel</option>
+              <option value="trail">Trail</option>
+              <option value="any">Any surface</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="subgroup">
+          <h3>Via points</h3>
+          <div class="control">
+            <span>Course must pass these, in order</span>
+            <ul id="via-list" class="hint"></ul>
+            <button id="add-via" title="Add a via point (V)" disabled>Add via point</button>
+          </div>
+        </div>
+
+        <details id="areas-panel" class="section">
+          <summary>Offline areas</summary>
+          <div class="section-body">
+            <div class="subgroup">
+              <h3>Path network</h3>
+              <p class="hint">
+                Download the network around the start marker once; searches inside a saved area skip
+                the (often unreliable) Overpass servers entirely. Traveling? Download the
+                destination before the trip — outside Sweden this can take many minutes.
+              </p>
+              <label class="control">
+                <span>Area radius (km)</span>
+                <select id="area-radius">
+                  <option value="5">5</option>
+                  <option value="8" selected>8</option>
+                  <option value="10">10</option>
+                  <option value="15">15 (covers long courses)</option>
+                </select>
+              </label>
+              <label class="control checkbox">
+                <input type="checkbox" id="connectors-toggle-offline" />
+                <span>Informal street crossings</span>
+                <button
+                  type="button"
+                  class="info-button"
+                  id="connectors-info-offline"
+                  aria-label="About informal street crossings"
+                >
+                  ⓘ
+                </button>
+              </label>
+              <label class="control checkbox">
+                <input type="checkbox" id="estimate-bridge-height-offline" />
+                <span>Estimate height for untagged bridges</span>
+                <button
+                  type="button"
+                  class="info-button"
+                  id="estimate-bridge-height-info-offline"
+                  aria-label="About estimating bridge height"
+                >
+                  ⓘ
+                </button>
+              </label>
+              <button id="download-area" disabled>Download area around start</button>
+              <progress id="area-progress" max="1" value="0" hidden></progress>
+              <ul id="areas-list" class="hint"></ul>
+              <p class="hint" id="storage-info"></p>
+            </div>
+            <div class="subgroup" id="traces-panel">
+              <h3>
+                GPS traces<button
+                  type="button"
+                  class="info-button"
+                  id="traces-info"
+                  aria-label="About GPS traces"
+                >
+                  ⓘ
+                </button>
+              </h3>
+              <p class="hint">
+                Where people actually run: public running-pace GPS traces from OpenStreetMap, so the
+                search can favour paths that are really run rather than merely mapped.
+              </p>
+              <p id="traces-info-text" hidden>
+                Downloads the public GPS traces people have uploaded to OpenStreetMap around the
+                start marker, keeping only the points recorded at a running pace (3–11 min/km), so
+                the search can favour paths that are really run rather than merely mapped. Only
+                traces uploaded with their timestamps can be told apart from a drive or a bike ride,
+                so most of what arrives is discarded — and <strong>this takes a long time</strong>:
+                the API hands out 5 000 points at a time, one ~2 km box after another. Minutes for a
+                small radius, far longer for a big one. Cancel stops it, and then nothing is saved.
+                Uses the same area radius as above.
+              </p>
+              <button id="download-traces" disabled>Download GPS traces around start</button>
+              <ul id="traces-list" class="hint"></ul>
+            </div>
+          </div>
+        </details>
+
+        <details id="advanced-panel" class="section">
+          <summary>Advanced settings</summary>
+          <div class="section-body">
+            <div class="subgroup">
+              <h3>Search</h3>
+              <label class="control">
+                <span>Algorithm</span>
+                <select id="algorithm-select">
+                  <option value="beam" selected>Beam search</option>
+                  <option value="walk">Random walk (baseline)</option>
+                </select>
+              </label>
+              <label class="control"
+                ><span>Search effort (beam width; higher = slower, sometimes better)</span>
+                <input type="number" id="beam-width" value="400" min="50" max="800" step="50"
+              /></label>
+              <div class="control">
+                <span>Seed</span>
+                <div class="row">
+                  <input
+                    type="number"
+                    id="seed-input"
+                    value="1"
+                    min="1"
+                    step="1"
+                    aria-label="Seed"
+                  />
+                  <button
+                    id="seed-random"
+                    class="inline-button"
+                    title="Randomise the seed"
+                    aria-label="Randomise the seed"
+                  >
+                    🎲
+                  </button>
+                </div>
+              </div>
+              <div class="control">
+                <span>Start coordinates</span>
+                <div class="row">
+                  <input
+                    type="number"
+                    id="coord-lat"
+                    step="0.00001"
+                    placeholder="lat"
+                    aria-label="Latitude"
+                  />
+                  <input
+                    type="number"
+                    id="coord-lon"
+                    step="0.00001"
+                    placeholder="lon"
+                    aria-label="Longitude"
+                  />
+                </div>
+                <button id="coord-set" style="margin-top: 6px">Set marker</button>
+              </div>
+              <label class="control checkbox">
+                <input type="checkbox" id="start-anywhere" />
+                <span
+                  >Start anywhere in the zone (takes more compute time; does not guarantee a better
+                  course)</span
+                >
+              </label>
+              <label class="control checkbox">
+                <input type="checkbox" id="connectors-toggle" />
+                <span>Informal street crossings</span>
+                <button
+                  type="button"
+                  class="info-button"
+                  id="connectors-info"
+                  aria-label="About informal street crossings"
+                >
+                  ⓘ
+                </button>
+              </label>
+              <p id="connectors-info-text" hidden>
+                Experimental: lets courses cross residential streets anywhere, not only at mapped
+                junctions. Slower, and can reduce course quality.
+              </p>
+              <label class="control checkbox">
+                <input type="checkbox" id="estimate-bridge-height" />
+                <span>Estimate height for untagged bridges</span>
+                <button
+                  type="button"
+                  class="info-button"
+                  id="estimate-bridge-height-info"
+                  aria-label="About estimating bridge height"
+                >
+                  ⓘ
+                </button>
+              </label>
+              <p id="estimate-bridge-height-info-text" hidden>
+                Experimental: guesses a rise over long bridges OpenStreetMap has not tagged with a
+                height (most of them — some well-known ones included). Leaves tunnels and short
+                bridges untouched. Off reproduces today's scores exactly; the guess is a geometric
+                estimate, not measured data.
+              </p>
+              <label class="control">
+                <span>Via point tolerance (± km around a via's pinned km)</span>
+                <input type="number" id="via-tolerance" value="0.3" min="0.1" step="0.1" />
+              </label>
+            </div>
+
+            <div class="subgroup">
+              <h3>Weights</h3>
+              <p class="hint">
+                How much each factor matters (0 = ignore). Changing weights changes what the
+                mismatch number means — only compare mismatches produced with the same weights.
+              </p>
+              <div class="weight">
+                <span
+                  >Local shape
+                  <button
+                    type="button"
+                    class="info-button"
+                    data-weight="localShape"
+                    aria-label="About the Local shape weight"
+                  >
+                    ⓘ
+                  </button></span
+                >
+                <div class="row">
+                  <input
+                    type="number"
+                    id="w-localShape"
+                    value="9"
+                    min="0"
+                    step="0.5"
+                    aria-label="Local shape weight"
+                  />
+                  <input
+                    type="range"
+                    id="ws-localShape"
+                    value="9"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    aria-label="Local shape weight slider"
+                  />
+                </div>
+              </div>
+              <div class="weight">
+                <span
+                  >Total gain/loss
+                  <button
+                    type="button"
+                    class="info-button"
+                    data-weight="gainLoss"
+                    aria-label="About the Total gain/loss weight"
+                  >
+                    ⓘ
+                  </button></span
+                >
+                <div class="row">
+                  <input
+                    type="number"
+                    id="w-gainLoss"
+                    value="8"
+                    min="0"
+                    step="0.5"
+                    aria-label="Total gain/loss weight"
+                  />
+                  <input
+                    type="range"
+                    id="ws-gainLoss"
+                    value="8"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    aria-label="Total gain/loss weight slider"
+                  />
+                </div>
+              </div>
+              <div class="weight">
+                <span
+                  >Turns
+                  <button
+                    type="button"
+                    class="info-button"
+                    data-weight="turns"
+                    aria-label="About the Turns weight"
+                  >
+                    ⓘ
+                  </button></span
+                >
+                <div class="row">
+                  <input
+                    type="number"
+                    id="w-turns"
+                    value="2"
+                    min="0"
+                    step="0.5"
+                    aria-label="Turns weight"
+                  />
+                  <input
+                    type="range"
+                    id="ws-turns"
+                    value="2"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    aria-label="Turns weight slider"
+                  />
+                </div>
+              </div>
+              <div class="weight">
+                <span
+                  >Surface
+                  <button
+                    type="button"
+                    class="info-button"
+                    data-weight="surface"
+                    aria-label="About the Surface weight"
+                  >
+                    ⓘ
+                  </button></span
+                >
+                <div class="row">
+                  <input
+                    type="number"
+                    id="w-surface"
+                    value="15"
+                    min="0"
+                    step="1"
+                    aria-label="Surface weight"
+                  />
+                  <input
+                    type="range"
+                    id="ws-surface"
+                    value="15"
+                    min="0"
+                    max="100"
+                    step="1"
+                    aria-label="Surface weight slider"
+                  />
+                </div>
+              </div>
+              <div class="weight">
+                <span
+                  >Safety
+                  <button
+                    type="button"
+                    class="info-button"
+                    data-weight="penalty"
+                    aria-label="About the Safety weight"
+                  >
+                    ⓘ
+                  </button></span
+                >
+                <div class="row">
+                  <input
+                    type="number"
+                    id="w-penalty"
+                    value="30"
+                    min="0"
+                    step="5"
+                    aria-label="Safety weight"
+                  />
+                  <input
+                    type="range"
+                    id="ws-penalty"
+                    value="30"
+                    min="0"
+                    max="100"
+                    step="5"
+                    aria-label="Safety weight slider"
+                  />
+                </div>
+              </div>
+              <div class="weight">
+                <span
+                  >Repeats
+                  <button
+                    type="button"
+                    class="info-button"
+                    data-weight="oscillation"
+                    aria-label="About the Repeats weight"
+                  >
+                    ⓘ
+                  </button></span
+                >
+                <div class="row">
+                  <input
+                    type="number"
+                    id="w-oscillation"
+                    value="80"
+                    min="0"
+                    step="5"
+                    aria-label="Repeats weight"
+                  />
+                  <input
+                    type="range"
+                    id="ws-oscillation"
+                    value="80"
+                    min="0"
+                    max="100"
+                    step="5"
+                    aria-label="Repeats weight slider"
+                  />
+                </div>
+              </div>
+              <div class="weight">
+                <span
+                  >Circularity
+                  <button
+                    type="button"
+                    class="info-button"
+                    data-weight="circularity"
+                    aria-label="About the Circularity weight"
+                  >
+                    ⓘ
+                  </button></span
+                >
+                <div class="row">
+                  <input
+                    type="number"
+                    id="w-circularity"
+                    value="0"
+                    min="0"
+                    step="0.5"
+                    aria-label="Circularity weight"
+                  />
+                  <input
+                    type="range"
+                    id="ws-circularity"
+                    value="0"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    aria-label="Circularity weight slider"
+                  />
+                </div>
+              </div>
+              <div class="weight">
+                <span
+                  >Avoid traffic lights
+                  <button
+                    type="button"
+                    class="info-button"
+                    data-weight="trafficLights"
+                    aria-label="About the Avoid traffic lights weight"
+                  >
+                    ⓘ
+                  </button></span
+                >
+                <div class="row">
+                  <input
+                    type="number"
+                    id="w-trafficLights"
+                    value="0"
+                    min="0"
+                    step="0.5"
+                    aria-label="Traffic lights weight"
+                  />
+                  <input
+                    type="range"
+                    id="ws-trafficLights"
+                    value="0"
+                    min="0"
+                    max="10"
+                    step="0.5"
+                    aria-label="Traffic lights weight slider"
+                  />
+                </div>
+              </div>
+              <div class="weight">
+                <span
+                  >Prefer paths people actually run
+                  <button
+                    type="button"
+                    class="info-button"
+                    data-weight="untracked"
+                    aria-label="About the Unrun ground weight"
+                  >
+                    ⓘ
+                  </button></span
+                >
+                <div class="row">
+                  <input
+                    type="checkbox"
+                    id="use-traces"
+                    aria-label="Prefer paths people actually run"
+                  />
+                  <input
+                    type="number"
+                    id="w-untracked"
+                    value="5"
+                    min="0"
+                    step="1"
+                    aria-label="Unrun ground weight"
+                  />
+                  <input
+                    type="range"
+                    id="ws-untracked"
+                    value="5"
+                    min="0"
+                    max="10"
+                    step="1"
+                    aria-label="Unrun ground weight slider"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="subgroup">
+              <h3>Your own course</h3>
+              <label class="control">
+                <span>Upload your own course for comparison or improvement</span>
+                <input type="file" id="compare-input" accept=".gpx,application/gpx+xml" />
+              </label>
+              <div class="control">
+                <span
+                  >…or draw the race profile to chase: pull the knob right to draw, left to
+                  erase</span
+                >
+                <div id="draw-wrap">
+                  <div id="draw-canvas"></div>
+                  <input
+                    type="range"
+                    id="draw-elev"
+                    min="20"
+                    max="400"
+                    step="20"
+                    value="60"
+                    aria-label="Maximum elevation"
+                    title="Maximum elevation"
+                  />
+                </div>
+                <label class="control">
+                  <span
+                    >Length: <output id="draw-length-value">10.0</output> km · elevation range
+                    ±<output id="draw-elev-value">60</output> m</span
+                  >
+                  <input
+                    type="range"
+                    id="draw-length"
+                    min="1"
+                    max="42.2"
+                    step="0.1"
+                    value="10"
+                    aria-label="Drawn course length"
+                  />
+                </label>
+                <button id="draw-use" disabled>Use as input</button>
+              </div>
+            </div>
+
+            <div class="subgroup">
+              <h3>Editing</h3>
+              <div class="control">
+                <span>
+                  Reroute window ±
+                  <input
+                    type="number"
+                    id="reroute-window"
+                    value="600"
+                    min="100"
+                    max="3000"
+                    step="100"
+                    style="width: 80px"
+                  />
+                  m of course replaced per edit
+                </span>
+                <label class="checkbox">
+                  <input type="checkbox" id="show-edit-window" />
+                  <span
+                    >Also outline the window as a box (the drag preview shows its ends anyway)</span
+                  >
+                </label>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details id="docs-panel" class="section">
+          <summary>Documentation</summary>
+          <div class="section-body">
+            <button id="open-manual">Open the manual</button>
+
+            <div class="subgroup">
+              <h3>Legend</h3>
+              <ul id="legend" class="hint">
+                <li><span class="swatch" style="--c: #2563eb"></span>Course on paved ground</li>
+                <li><span class="swatch" style="--c: #d97706"></span>Course on gravel</li>
+                <li><span class="swatch" style="--c: #16a34a"></span>Course on trail</li>
+                <li><span class="swatch" style="--c: #6b7280"></span>Course on unknown ground</li>
+                <li>
+                  <span class="swatch faded" style="--c: #2563eb"></span>Faded: your own uploaded
+                  course, as matched to the map
+                </li>
+                <li><span class="swatch zone" style="--c: #c63d80"></span>Start/finish zone</li>
+                <li><span class="swatch dot" style="--c: #111"></span>Km marks along the course</li>
+                <li><span class="swatch finish"></span>Finish</li>
+                <li>
+                  <span class="swatch dot" style="--c: #7c3aed"></span>Via points, and the points an
+                  edit moves or adds
+                </li>
+                <li>
+                  <span class="swatch dot" style="--c: #dc2626"></span>Marked for deletion, or the
+                  point an edit starts from
+                </li>
+              </ul>
+            </div>
+
+            <div class="subgroup" id="shortcuts-subgroup">
+              <h3>Keyboard shortcuts</h3>
+              <p class="hint">Press ? to call the same list up over the map.</p>
+              <dl id="shortcuts-help" class="shortcuts hint"></dl>
+            </div>
+          </div>
+        </details>
+      </section>
+    </div>
+  </body>
+</html>

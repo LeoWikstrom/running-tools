@@ -1,0 +1,336 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: light dark;
+  --page-bg: light-dark(#f2f3f5, #1c1e21);
+  --panel-bg: light-dark(#ffffff, #26282c);
+  --edge: light-dark(rgb(0 0 0 / 0.16), rgb(255 255 255 / 0.14));
+  --muted: light-dark(rgb(0 0 0 / 0.55), rgb(255 255 255 / 0.6));
+  /* Honeycomb tile strokes are hardcoded in the SVGs (a background-image
+     SVG can't inherit CSS), so the light/dark swap happens here. */
+  --comb-tile: url("./assets/honeycomb.svg");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --comb-tile: url("./assets/honeycomb-dark.svg");
+  }
+}
+
+/* The tile lives on html, not body: body's box only reaches as far as the
+   content, while html's background paints the whole canvas. */
+html {
+  background-color: var(--page-bg);
+  background-image: var(--comb-tile);
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+main {
+  /* Three cards + two gaps + the side padding. */
+  max-width: calc(3 * 37.5rem + 2 * 1.25rem + 2.5rem);
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 3rem;
+}
+
+header {
+  text-align: center;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.9rem;
+  letter-spacing: -0.02em;
+}
+
+header p {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+}
+
+.apps {
+  list-style: none;
+  margin: 2rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+.app {
+  width: 37.5rem;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg);
+  border: 1px solid var(--edge);
+  border-top: 4px solid var(--app-accent);
+  border-radius: 12px;
+  padding: 1.25rem 1.4rem 1.4rem;
+}
+
+.app h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.app-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0.9rem 0 0.2rem;
+}
+
+.app-art .map-bg {
+  fill: color-mix(in srgb, var(--app-accent) 8%, transparent);
+  stroke: var(--edge);
+}
+
+.app-art .streets {
+  stroke: var(--edge);
+  stroke-width: 1.5;
+}
+
+.app-art .grid {
+  stroke: var(--edge);
+  stroke-width: 2;
+}
+
+.app-art .race {
+  stroke: var(--muted);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-art .accent-line {
+  stroke: var(--app-accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-art .accent-line.thin {
+  stroke-width: 3;
+}
+
+.app-art .accent-fill {
+  fill: var(--app-accent);
+}
+
+.app-art .poi {
+  fill: var(--panel-bg);
+  stroke: var(--app-accent);
+  stroke-width: 3;
+}
+
+.app-art .waves {
+  stroke: #f0a434;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+}
+
+.app-art .bus-body {
+  fill: var(--app-accent);
+}
+
+.app-art .bus-detail {
+  fill: var(--panel-bg);
+}
+
+.app-art .bus-wheel {
+  fill: var(--app-accent-deep);
+}
+
+/* The bus rides the route line: offset-path is the SAME path the accent
+   line draws, anchor (0,0) on the line, kept upright. Resting state
+   (no-JS, reduced motion, post-drive) is 76% along — parked on the top
+   road, exactly where the static bus always stood. */
+.app-art .bus {
+  offset-path: path("M22 90 H118 C146 90 146 60 174 60 H298");
+  offset-rotate: 0deg;
+  offset-distance: 76%;
+}
+@supports not (offset-path: path("M0 0 H8")) {
+  .app-art .bus {
+    transform: translate(230px, 60px);
+  }
+}
+
+/* Transient sound-wave bursts: each place "speaks" as the route passes
+   it, then falls quiet — resting state is invisible, so the base rule is
+   unconditional (reduced-motion visitors simply never see the burst; the
+   .stay waves at the final stop still show). */
+.app-art .burst {
+  opacity: 0;
+}
+
+/* Draw-on reveal — routes and profile lines sweep in the way the apps
+   themselves draw them (the inline script sets data-play on first
+   viewport entry). Every drawn path carries pathLength="1" so dash
+   geometry is unit-based; --d staggers per element, --dur/--ease let the
+   routes run linear so the pops, bursts and bus stay in step with the
+   line's tip. visibility hides the pre-draw state — with round linecaps
+   a zero-length dash still paints a dot. The hidden initial state only
+   exists inside no-preference, so reduced-motion visitors always see the
+   finished artwork. */
+@media (prefers-reduced-motion: no-preference) {
+  .app-art .draw {
+    visibility: hidden;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+  .app-art .pop {
+    opacity: 0;
+    transform: scale(0.3);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .app-art .bus {
+    opacity: 0;
+  }
+  .app-art[data-play] .draw {
+    visibility: visible;
+    stroke-dashoffset: 0;
+    transition-property: stroke-dashoffset, visibility;
+    transition-duration: var(--dur, 1.5s), 0s;
+    transition-timing-function: var(--ease, ease-out), step-start;
+    transition-delay: var(--d, 0s), var(--d, 0s);
+  }
+  .app-art[data-play] .pop {
+    opacity: 1;
+    transform: scale(1);
+    transition:
+      opacity 0.3s ease var(--d, 0s),
+      transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0s);
+  }
+  .app-art[data-play] .burst {
+    animation: tours-burst 1.1s ease-out var(--d, 0s) both;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  /* Final stop's waves: same grow-from-the-node motion as the bursts,
+     but landing visible (dash-drawing the three arcs at staggered delays
+     read as two animations fighting). Hidden state lives in this block
+     only, so the resting state is the finished art. */
+  .app-art .stay {
+    opacity: 0;
+  }
+  .app-art[data-play] .stay {
+    animation: tours-stay 0.9s ease-out var(--d, 0s) both;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .app-art[data-play] .bus {
+    opacity: 1;
+    transition: opacity 0.2s ease var(--d, 0s);
+    animation: tours-bus-drive 1.8s linear var(--d, 0s) both;
+  }
+  .app-art[data-play] .bus-top {
+    animation: tours-bus-bump 0.3s ease-in-out var(--d, 0s) 6 alternate;
+  }
+}
+
+@keyframes tours-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+
+@keyframes tours-stay {
+  from {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tours-bus-drive {
+  from {
+    offset-distance: 0%;
+  }
+  to {
+    offset-distance: 76%;
+  }
+}
+
+@keyframes tours-bus-bump {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-1.8px);
+  }
+}
+
+.app h2 a {
+  color: var(--app-accent);
+  text-decoration: none;
+}
+
+.app h2 a:hover {
+  text-decoration: underline;
+}
+
+.app p {
+  margin: 0.5rem 0 1rem;
+}
+
+.app nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  /* Cards in a row stretch to the tallest; keep the buttons on the bottom edge. */
+  margin-top: auto;
+}
+
+.button {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  background: var(--app-accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.button:hover {
+  background: var(--app-accent-deep);
+}
+
+.button.secondary {
+  background: transparent;
+  color: var(--app-accent);
+  border: 1px solid var(--app-accent);
+}
+
+.button.secondary:hover {
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+}
+
+footer {
+  margin-top: 2.5rem;
+  text-align: center;
+}
+
+footer a {
+  color: var(--muted);
+}
