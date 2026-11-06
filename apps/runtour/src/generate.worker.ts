@@ -1,14 +1,14 @@
 import { buildGraph, snapToNode } from '@running/core/graph/build';
 import { dijkstra } from '@running/core/graph/dijkstra';
 import type { OverpassResponse } from '@running/core/net/overpass';
+import { tourLoopSearch } from '@running/core/search/tourLoop';
 import {
   improveTourCourse,
   snapPlacesToNodes,
-  tourBeamSearch,
   tourCoursePoints,
   type TourSearchPlace,
   type TourWeights,
-} from '@running/core/search/tourBeam';
+} from '@running/core/search/tourScore';
 
 export interface GenerateRequest {
   response: OverpassResponse;
@@ -88,7 +88,7 @@ onmessage = (e: MessageEvent<GenerateRequest>) => {
     };
     const base = refineEdges
       ? { edges: refineEdges, dirs: [], lengthM: 0, score: 0, collected: [] }
-      : tourBeamSearch(graph, startNode, snapped, options)[0];
+      : tourLoopSearch(graph, startNode, snapped, options)[0];
     if (!base) {
       throw new Error('No course of that length found here — try another start or length.');
     }

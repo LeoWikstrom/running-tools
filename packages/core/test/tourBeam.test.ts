@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { buildGraph, snapToNode } from '../src/graph/build';
 import { otherNode } from '../src/graph/types';
 import type { OverpassNode, OverpassResponse, OverpassWay } from '../src/net/overpass';
+import { tourBeamSearch } from '../src/search/tourBeam';
 import {
   improveTourCourse,
   scoreTourCourse,
   snapPlacesToNodes,
-  tourBeamSearch,
   tourCoursePoints,
   type TourSearchPlace,
-} from '../src/search/tourBeam';
+} from '../src/search/tourScore';
 
 /**
  * A synthetic city: a 13×13 street grid, 150 m spacing. Vertical streets are

@@ -13,7 +13,7 @@ import { geosearch, pagesToCandidates } from '@running/core/poi/wikipedia';
 import { fetchItemsAround, itemsToCandidates } from '@running/core/poi/wikidata';
 import { getNetwork, type OverpassResponse } from '@running/core/net/overpass';
 import { haversineMeters } from '@running/core/geo';
-import type { TourSearchPlace, TourWeights } from '@running/core/search/tourBeam';
+import type { TourSearchPlace, TourWeights } from '@running/core/search/tourScore';
 import type { GenerateReply, GenerateRequest } from './generate.worker';
 import GenerateWorker from './generate.worker?worker';
 

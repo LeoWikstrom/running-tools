@@ -6,6 +6,7 @@ _site/
 .DS_Store
 coverage/
 packages/core/bench/cache/
+scripts/.cache/
 android/*/build/
 android/*/assets/
 android/*/keystore/

@@ -29,6 +29,27 @@ describe('findPointSpurs', () => {
     expect(spurs[0]!.lengthM).toBeCloseTo(80, 0);
   });
 
+  it('finds an eastward spur too — the reversal check must not care about wrap sign', () => {
+    // On a sphere an east/west reversal is a hair over 180°, which wraps to a
+    // negative angleDiffDeg; the unsigned check must still see the U-turn.
+    const LONM = M / Math.cos((LAT * Math.PI) / 180);
+    const pts: [number, number][] = [
+      [LAT, 0],
+      [LAT, 150 * LONM],
+      [LAT, 300 * LONM],
+      [LAT, 500 * LONM], // tip
+      [LAT, 300 * LONM],
+      [LAT, 150 * LONM],
+      [LAT + 150 * M, 150 * LONM],
+    ];
+    const spurs = findPointSpurs(
+      pts.map((p) => p[0]),
+      pts.map((p) => p[1]),
+    );
+    expect(spurs).toHaveLength(1);
+    expect(spurs[0]!.tip).toBe(3);
+  });
+
   it('catches a spur whose return leg runs on a parallel offset path', () => {
     // Out north on one path, back south on a twin 10 m east — no mirrored
     // points, but the course returns beside the junction heading reversed.

@@ -70,7 +70,7 @@ export function findPointSpurs(
     for (let m = i + 2; m + 1 < n && cum[m]! - cum[i]! <= maxPathM; m++) {
       if (d(i, m) > tolM) continue;
       const hBack = heading(m - 1, m);
-      if (angleDiffDeg(hOut, hBack) < 130) continue;
+      if (Math.abs(angleDiffDeg(hOut, hBack)) < 130) continue;
       const lengthM = (cum[m]! - cum[i]!) / 2;
       if (lengthM < minLengthM) break;
       if (!pureRetrace(i, m)) continue;

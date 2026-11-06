@@ -83,6 +83,18 @@ describe('dijkstra', () => {
     expect(path?.edges).toEqual([0, 1]);
     expect(pathNodes(graph, path!, 0)).toEqual([0, 1, 3]);
   });
+
+  it('edgeCost override diverts the path while lengthM stays true metres', () => {
+    // Make the short upper route (0-1-3) expensive: edge 0 costs 10×.
+    const result = dijkstra(graph, [0], {
+      target: 3,
+      edgeCost: (ei) => graph.edges[ei]!.lengthM * (ei === 0 ? 10 : 1),
+    });
+    const path = reconstructPath(graph, result, 0, 3);
+    expect(path?.edges).toEqual([2, 3]);
+    expect(path?.lengthM).toBe(300);
+    expect(result.dist[3]).toBe(300);
+  });
 });
 
 describe('kShortestPaths', () => {

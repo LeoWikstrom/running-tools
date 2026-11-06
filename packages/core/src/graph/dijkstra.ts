@@ -58,6 +58,9 @@ export interface DijkstraOptions {
   excludedEdges?: Set<number>;
   /** Node indices to treat as removed (sources/target are never excluded). */
   excludedNodes?: Set<number>;
+  /** Cost of traversing an edge; defaults to its length. With an override,
+      `dist` is in cost units — reconstructPath still reports true metres. */
+  edgeCost?: (edgeIndex: number) => number;
 }
 
 export interface DijkstraResult {
@@ -81,6 +84,7 @@ export function dijkstra(
     heap.push(s, 0);
   }
   const maxDist = options.maxDist ?? Infinity;
+  const edgeCost = options.edgeCost;
 
   while (heap.size > 0) {
     const { node, dist: d } = heap.pop();
@@ -92,7 +96,7 @@ export function dijkstra(
       const e = graph.edges[ei]!;
       const next = otherNode(e, node);
       if (options.excludedNodes?.has(next) && next !== options.target) continue;
-      const nd = d + e.lengthM;
+      const nd = d + (edgeCost ? edgeCost(ei) : e.lengthM);
       if (nd < dist[next]! && nd <= maxDist) {
         dist[next] = nd;
         viaEdge[next] = ei;
@@ -119,6 +123,7 @@ export function reconstructPath(
   if (!Number.isFinite(result.dist[to]!)) return null;
   const edges: number[] = [];
   const dirs: number[] = [];
+  let lengthM = 0;
   let node = to;
   while (node !== from) {
     const ei = result.viaEdge[node]!;
@@ -127,9 +132,10 @@ export function reconstructPath(
     const prev = otherNode(e, node);
     edges.push(ei);
     dirs.push(e.a === prev ? 1 : 0);
+    lengthM += e.lengthM;
     node = prev;
   }
   edges.reverse();
   dirs.reverse();
-  return { edges, dirs, lengthM: result.dist[to]! };
+  return { edges, dirs, lengthM };
 }
