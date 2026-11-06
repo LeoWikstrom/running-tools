@@ -158,3 +158,49 @@ d5fbfeb (removing siblings, same-dir pricing, direction-aware final scorer,
 auto-pruning, asymmetric tolerance, burn ranking); `sliderWeights` back to
 repeat 0.15 and slider-coupled crossing; the worker's beamWidth 800 override
 removed. Everything under "What stayed" above remains in place.
+
+## The loop-first generator (2026-11-06, later the same day)
+
+The "structurally different generator" this file recommended was built:
+`tourLoopSearch` (`packages/core/src/search/tourLoop.ts`) replaces the beam
+as the course constructor. The idea inverts the whole premise above — stop
+pricing bad topology, make it unconstructible:
+
+- Waypoints spread around the start (interest-weighted samples from the
+  place pool, geometric fallbacks at three radius tiers per 22.5° sector for
+  place-poor ground; required vias always members), visited in bearing
+  order, routed with sequential Dijkstras. **A shortest path never visits a
+  node twice, so a leg cannot contain a spur.** Edges used by earlier legs
+  cost 4×, so the course comes home a different way.
+- The routing metric (`baseCost`) folds in the penalty and centroid sliders
+  and discounts edges incident to a place's snapped node (up to 40 %), so
+  cheap paths actually thread *through* places and collect them.
+- `findPointSpurs` (the manual pruner's detector) hard-gates every
+  candidate: any out-and-back whose tip is not within 30 m of a collected
+  place or via → candidate rejected. The improve pass got the same gate, so
+  window swaps cannot smuggle a spur back in. Found while wiring this: the
+  detector's heading check used the *signed* `angleDiffDeg` — east/west
+  reversals wrap to −180° and were silently missed; `Math.abs` fixed the
+  manual pruner too.
+- Length control: ~16-set rounds, each recalibrating the waypoint band and
+  a measured routed/estimated length ratio (streets wind, reuse detours
+  stretch the closing legs — the first round's routed lengths teach the
+  city's factor). No clean candidate within ±5 % after all rounds → best
+  clean one within ±15 % (Leo's call: off-length beats spur-padded, every
+  time); beyond that the usual "no course found" error.
+- Sliders now choose among clean topologies via the unchanged
+  `scoreTourCourse` instead of steering one search — the beam-survivor
+  problem dissolves rather than being priced away.
+
+Measured (central Gothenburg, pre-baked tiles, real place pool, all five
+slider mixes × 4/6/8 km — `scripts/verify-tour-quality.ts`): **zero
+unsanctioned spurs in all 15 runs**, node revisits 0–6 (the beam's terminal
+retraces were 15–21), lengths within ±3.1 %, construction ≤ 2.6 s.
+Collected interest is on par with the beam (6 km: 6 places/315 vs the
+beam's 7/395; 4 km: 5/298 vs 4/223) — without a single out-and-back.
+
+Still open: the London (Moorgate) verification — every Overpass mirror
+refused this Termux network on 2026-11-06 (406 / header timeouts), so the
+headless London run and the in-app check are pending. `tourBeamSearch`
+stays in the tree until London signs off, then it and its beam-only tests
+get deleted (the scorer/improver live on in `tourScore.ts`).
