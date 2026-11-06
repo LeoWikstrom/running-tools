@@ -2,10 +2,10 @@ import { bearingDeg, haversineMeters } from '../geo';
 import { dijkstra, reconstructPath } from '../graph/dijkstra';
 import { otherNode, type Graph } from '../graph/types';
 import {
+  classifyCourseSpurs,
   DEFAULT_TOUR_WEIGHTS,
   scoreTourCourse,
   tourCoursePoints,
-  unsanctionedSpurCount,
   type SnappedPlace,
   type TourCourse,
   type TourSearchOptions,
@@ -295,6 +295,7 @@ export function tourLoopSearch(
     return { edges, lengthM };
   };
 
+  const spurBudget = options.outerSpurBudgetFrac ?? 0;
   const toCourse = (edges: number[], lengthM: number): TourCourse | null => {
     const scored = scoreTourCourse(graph, edges, startNode, places, w, target, minSpacing);
     const collectedIds = new Set(scored.collected.map((c) => c.id));
@@ -302,7 +303,8 @@ export function tourLoopSearch(
       (s) => collectedIds.has(s.id) || viaNodes.has(s.node),
     );
     const points = tourCoursePoints(graph, { edges, dirs: [], lengthM, score: 0, collected: [] }, startNode);
-    if (unsanctionedSpurCount(points, sanction) > 0) return null;
+    const spurs = classifyCourseSpurs(points, sanction);
+    if (spurs.internal > 0 || spurs.outerLenM > spurBudget * lengthM) return null;
     const dirs: number[] = [];
     let node = startNode;
     for (const ei of edges) {

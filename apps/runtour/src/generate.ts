@@ -72,7 +72,18 @@ export interface GenerationContext {
   places: TourSearchPlace[];
   targetLengthM: number | null;
   weights: Partial<TourWeights>;
+  outerSpurBudgetFrac?: number;
   edges: number[];
+}
+
+/** Outer-spur budget at the fully twisty end of the circular slider: how
+    much of the course may be out-and-back pokes into fresh ground. At the
+    circular end the budget is 0 and every unexcused spur is rejected.
+    Internal double-backs are rejected at any slider position. */
+const OUTER_SPUR_MAX_FRAC = 0.08;
+
+function outerSpurBudgetFrac(p: GenerateParams): number {
+  return ((100 - p.twistSlider) / 100) * OUTER_SPUR_MAX_FRAC;
 }
 
 function sliderWeights(p: GenerateParams): Partial<TourWeights> {
@@ -323,6 +334,7 @@ export function generateCourse(
       places,
       targetLengthM: params.targetLengthM,
       weights: sliderWeights(params),
+      outerSpurBudgetFrac: outerSpurBudgetFrac(params),
     };
     const result = await runWorker(request, (w) => (worker = w), onProgress);
     return { ...result, context: { ...request, edges: result.edges } };
@@ -388,6 +400,7 @@ export async function refineCourse(
       places: context.places,
       targetLengthM: context.targetLengthM,
       weights: context.weights,
+      outerSpurBudgetFrac: context.outerSpurBudgetFrac,
       refineEdges: context.edges,
       // Dropping a detour shortens the course; the search tolerance of ±5 %
       // would veto exactly the straightening the refinement is for.
@@ -412,6 +425,7 @@ export async function regenerateCourse(
       places: context.places,
       targetLengthM: context.targetLengthM,
       weights: context.weights,
+      outerSpurBudgetFrac: context.outerSpurBudgetFrac,
     },
     () => {},
     onProgress,

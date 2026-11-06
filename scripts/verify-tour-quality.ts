@@ -31,10 +31,10 @@ import { geosearch, pagesToCandidates } from '../packages/core/src/poi/wikipedia
 import { fetchItemsAround, itemsToCandidates } from '../packages/core/src/poi/wikidata';
 import { tourLoopSearch } from '../packages/core/src/search/tourLoop';
 import {
+  classifyCourseSpurs,
   improveTourCourse,
   snapPlacesToNodes,
   tourCoursePoints,
-  unsanctionedSpurCount,
   type SnappedPlace,
   type TourCourse,
   type TourSearchPlace,
@@ -65,12 +65,16 @@ function sliderWeights(places: number, pedestrian: number, centre: number, twist
   } satisfies Partial<TourWeights>;
 }
 
-const MIXES: { name: string; weights: Partial<TourWeights> }[] = [
-  { name: 'defaults   ', weights: sliderWeights(50, 50, 50, 50) },
-  { name: 'places-max ', weights: sliderWeights(100, 50, 50, 50) },
-  { name: 'roads-ok   ', weights: sliderWeights(50, 0, 50, 50) },
-  { name: 'centre-max ', weights: sliderWeights(50, 50, 0, 50) },
-  { name: 'twist-max  ', weights: sliderWeights(50, 50, 50, 100) },
+/** apps/runtour OUTER_SPUR_MAX_FRAC × twisty share — keep in sync by eye. */
+const spurBudget = (twist: number): number => ((100 - twist) / 100) * 0.08;
+
+const MIXES: { name: string; weights: Partial<TourWeights>; budget: number }[] = [
+  { name: 'defaults   ', weights: sliderWeights(50, 50, 50, 50), budget: spurBudget(50) },
+  { name: 'places-max ', weights: sliderWeights(100, 50, 50, 50), budget: spurBudget(50) },
+  { name: 'roads-ok   ', weights: sliderWeights(50, 0, 50, 50), budget: spurBudget(50) },
+  { name: 'centre-max ', weights: sliderWeights(50, 50, 0, 50), budget: spurBudget(50) },
+  { name: 'circular   ', weights: sliderWeights(50, 50, 50, 100), budget: spurBudget(100) },
+  { name: 'twisty     ', weights: sliderWeights(50, 50, 50, 0), budget: spurBudget(0) },
 ];
 
 /** WDQS/Wikipedia refuse Node's bare default agent. */
@@ -183,17 +187,17 @@ function nodeRevisits(graphEdges: number[], graph: ReturnType<typeof buildGraph>
   return revisits;
 }
 
-function unsanctioned(
+function spursOf(
   graph: ReturnType<typeof buildGraph>,
   course: TourCourse,
   startNode: number,
   snapped: SnappedPlace[],
-): number {
+): ReturnType<typeof classifyCourseSpurs> {
   const ids = new Set(course.collected.map((c) => c.id));
   const sanction = snapped
     .filter((p) => p.required || ids.has(p.id))
     .map((p) => ({ lat: graph.nodeLat[p.node]!, lon: graph.nodeLon[p.node]! }));
-  return unsanctionedSpurCount(tourCoursePoints(graph, course, startNode), sanction);
+  return classifyCourseSpurs(tourCoursePoints(graph, course, startNode), sanction);
 }
 
 const response = await cached<OverpassResponse>(
@@ -211,10 +215,17 @@ console.log(
 );
 
 let failures = 0;
-console.log('mix          length  got     err     spurs  revisits  collected  interest  ms(gen+improve)');
+console.log(
+  'mix          length  got     err     internal  outerM(budget)  revisits  collected  interest  ms(gen+improve)',
+);
 for (const mix of MIXES) {
   for (const target of LENGTHS) {
-    const options = { targetLengthM: target, weights: mix.weights, improveTimeMs: 5000 };
+    const options = {
+      targetLengthM: target,
+      weights: mix.weights,
+      outerSpurBudgetFrac: mix.budget,
+      improveTimeMs: 5000,
+    };
     const t0 = Date.now();
     const courses = tourLoopSearch(graph, startNode, snapped, options);
     const t1 = Date.now();
@@ -225,16 +236,22 @@ for (const mix of MIXES) {
     }
     const improved = improveTourCourse(graph, courses[0]!, startNode, snapped, options);
     const t2 = Date.now();
-    const spurs = unsanctioned(graph, improved, startNode, snapped);
-    if (spurs > 0) failures++;
+    const spurs = spursOf(graph, improved, startNode, snapped);
+    const budgetM = mix.budget * improved.lengthM;
+    if (spurs.internal > 0 || spurs.outerLenM > budgetM) failures++;
     const err = (((improved.lengthM - target) / target) * 100).toFixed(1);
     const interest = improved.collected.reduce((s, c) => s + c.score, 0);
     console.log(
       `${mix.name} ${target}  ${Math.round(improved.lengthM)}  ${err.padStart(5)}%  ` +
-        `${spurs}      ${nodeRevisits(improved.edges, graph, startNode)}         ` +
+        `${spurs.internal}         ${Math.round(spurs.outerLenM)}(${Math.round(budgetM)})          ` +
+        `${nodeRevisits(improved.edges, graph, startNode)}         ` +
         `${improved.collected.length}         ${Math.round(interest)}       ${t1 - t0}+${t2 - t1}`,
     );
   }
 }
-console.log(failures === 0 ? 'OK: zero unsanctioned spurs everywhere' : `FAILURES: ${failures}`);
+console.log(
+  failures === 0
+    ? 'OK: zero internal spurs everywhere, outer spurs within budget'
+    : `FAILURES: ${failures}`,
+);
 process.exit(failures === 0 ? 0 : 1);

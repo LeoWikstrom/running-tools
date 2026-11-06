@@ -19,6 +19,9 @@ export interface GenerateRequest {
   /** Null (with a finish set): aim for the shortest interesting course. */
   targetLengthM: number | null;
   weights: Partial<TourWeights>;
+  /** Outer-spur length budget as a fraction of course length — bought by the
+      twisty end of the circular slider. Internal double-backs never pass. */
+  outerSpurBudgetFrac?: number;
   /** An existing course's edges: skip the beam, just re-improve — used when a
       place was removed so detours to it can straighten. The graph is rebuilt
       deterministically from the same response, so the indices stay valid. */
@@ -84,6 +87,7 @@ onmessage = (e: MessageEvent<GenerateRequest>) => {
       weights,
       endNode,
       lengthToleranceFrac: tolerance,
+      outerSpurBudgetFrac: e.data.outerSpurBudgetFrac,
       onProgress: (fraction: number) => post({ type: 'progress', fraction: fraction * 0.8 }),
     };
     const base = refineEdges

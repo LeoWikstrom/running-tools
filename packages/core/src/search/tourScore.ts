@@ -68,6 +68,11 @@ export interface TourSearchOptions {
   improveTimeMs?: number;
   /** Finish node for a point-to-point course; the start itself when absent (a loop). */
   endNode?: number;
+  /** Total one-way length of outer spurs (pokes into fresh ground that no
+      place excuses) the course may contain, as a fraction of its length.
+      0 (the default) forbids them; the twisty end of the circular slider
+      buys a budget. Internal double-backs are forbidden regardless. */
+  outerSpurBudgetFrac?: number;
   onProgress?: (fraction: number) => void;
 }
 
@@ -268,15 +273,29 @@ const SPUR_SANCTION_M = 30;
 const SPUR_TOL_M = 15;
 /** Detect out-and-backs up to this out+back path length. */
 const SPUR_MAX_PATH_M = 4000;
+/** A spur tip this close to the course outside the spur itself means the
+    spur retraces the course's own ground — an internal double-back. */
+const SPUR_INTERNAL_M = 20;
+
+export interface CourseSpurs {
+  /** Double-backs along the course's own ground (a segment walked three
+      times) — invisible on the map, prohibited whatever the sliders say. */
+  internal: number;
+  /** Pokes into otherwise-unvisited ground that no place excuses. */
+  outer: number;
+  /** One-way length of those outer pokes, metres. */
+  outerLenM: number;
+}
 
 /**
- * Out-and-back spurs in a course that no visited place excuses — the
- * distance-padding kind. Zero is the bar for a generated course.
+ * Out-and-back spurs in a course that no visited place excuses, split into
+ * the always-forbidden internal double-backs and the outer pokes a twisty
+ * slider may buy a budget for.
  */
-export function unsanctionedSpurCount(
+export function classifyCourseSpurs(
   points: [number, number][],
   sanction: { lat: number; lon: number }[],
-): number {
+): CourseSpurs {
   const lats = new Float64Array(points.length);
   const lons = new Float64Array(points.length);
   for (let i = 0; i < points.length; i++) {
@@ -284,14 +303,38 @@ export function unsanctionedSpurCount(
     lons[i] = points[i]![1];
   }
   const spurs = findPointSpurs(lats, lons, SPUR_TOL_M, 20, SPUR_MAX_PATH_M);
-  let count = 0;
+  const out: CourseSpurs = { internal: 0, outer: 0, outerLenM: 0 };
   for (const s of spurs) {
     const sanctioned = sanction.some(
       (c) => haversineMeters(lats[s.tip]!, lons[s.tip]!, c.lat, c.lon) <= SPUR_SANCTION_M,
     );
-    if (!sanctioned) count++;
+    if (sanctioned) continue;
+    let internal = false;
+    for (let j = 0; j < points.length; j++) {
+      // The span itself and its immediate neighbours do not count as "the
+      // course passes here anyway" — anything further out does.
+      if (j >= s.from - 1 && j <= s.to + 2) continue;
+      if (haversineMeters(lats[j]!, lons[j]!, lats[s.tip]!, lons[s.tip]!) <= SPUR_INTERNAL_M) {
+        internal = true;
+        break;
+      }
+    }
+    if (internal) out.internal++;
+    else {
+      out.outer++;
+      out.outerLenM += s.lengthM;
+    }
   }
-  return count;
+  return out;
+}
+
+/** Every unsanctioned spur, whatever its kind — the strict zero-budget bar. */
+export function unsanctionedSpurCount(
+  points: [number, number][],
+  sanction: { lat: number; lon: number }[],
+): number {
+  const spurs = classifyCourseSpurs(points, sanction);
+  return spurs.internal + spurs.outer;
 }
 
 const IMPROVE_WINDOW_MIN_M = 300;
@@ -328,7 +371,10 @@ export function improveTourCourse(
     requiredIds.every((id) => collected.some((c) => c.id === id));
   // A swap may not add an out-and-back that no visited place excuses; a
   // local window improvement must never undo the generator's clean topology.
-  const spursOf = (es: number[], collected: CollectedPlace[]): number => {
+  // Internal double-backs stay at zero (or whatever the incoming course
+  // already had); outer pokes may fill the twisty slider's budget.
+  const spurBudget = options.outerSpurBudgetFrac ?? 0;
+  const spursOf = (es: number[], collected: CollectedPlace[]): CourseSpurs => {
     const ids = new Set(collected.map((c) => c.id));
     const sanction = places
       .filter((p) => p.required || ids.has(p.id))
@@ -338,7 +384,7 @@ export function improveTourCourse(
       { edges: es, dirs: [], lengthM: 0, score: 0, collected: [] },
       startNode,
     );
-    return unsanctionedSpurCount(points, sanction);
+    return classifyCourseSpurs(points, sanction);
   };
   let bestSpurs = spursOf(edges, best.collected);
 
@@ -373,7 +419,10 @@ export function improveTourCourse(
             keepsRequired(scored.collected)
           ) {
             const spurs = spursOf(candidate, scored.collected);
-            if (spurs > bestSpurs) continue;
+            if (spurs.internal > bestSpurs.internal) continue;
+            if (spurs.outerLenM > Math.max(spurBudget * scored.lengthM, bestSpurs.outerLenM)) {
+              continue;
+            }
             edges = candidate;
             best = scored;
             bestSpurs = spurs;

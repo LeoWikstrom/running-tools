@@ -4,6 +4,7 @@ import type { Graph } from '../src/graph/types';
 import type { OverpassNode, OverpassResponse, OverpassWay } from '../src/net/overpass';
 import { tourLoopSearch } from '../src/search/tourLoop';
 import {
+  classifyCourseSpurs,
   improveTourCourse,
   snapPlacesToNodes,
   tourCoursePoints,
@@ -210,6 +211,42 @@ describe('tourLoopSearch on the synthetic grid', () => {
     expect(improved.score).toBeGreaterThanOrEqual(best.score);
     expect(improved.lengthM).toBeGreaterThanOrEqual(3600 * 0.95);
     expect(improved.lengthM).toBeLessThanOrEqual(3600 * 1.05);
+  });
+});
+
+describe('classifyCourseSpurs', () => {
+  const M = 1 / 111_195;
+  const LM = M / COS;
+  const pt = (xM: number, yM: number): [number, number] => [LAT0 + yM * M, LON0 + xM * LM];
+
+  it('a double-back along the course own ground is internal', () => {
+    // East to 600 m, back to 300, forward again and on — ground walked thrice.
+    const xs = [0, 150, 300, 450, 600, 450, 300, 450, 600, 750, 900];
+    const points = xs.map((x, i) => pt(x, i === xs.length - 1 ? 150 : 0));
+    const spurs = classifyCourseSpurs(points.slice(0, -1).concat([pt(900, 0), pt(900, 150)]), []);
+    expect(spurs.internal).toBeGreaterThan(0);
+    expect(spurs.outer).toBe(0);
+  });
+
+  it('a poke into fresh ground is outer, with its one-way length', () => {
+    const points: [number, number][] = [
+      pt(0, 0),
+      pt(150, 0),
+      pt(300, 0),
+      pt(300, 100),
+      pt(300, 200), // tip
+      pt(300, 100),
+      pt(300, 0),
+      pt(450, 0),
+      pt(600, 0),
+    ];
+    const spurs = classifyCourseSpurs(points, []);
+    expect(spurs.internal).toBe(0);
+    expect(spurs.outer).toBe(1);
+    expect(spurs.outerLenM).toBeCloseTo(200, -1);
+    // A place at the tip sanctions it entirely.
+    const sanctioned = classifyCourseSpurs(points, [{ lat: LAT0 + 200 * M, lon: LON0 + 300 * LM }]);
+    expect(sanctioned.internal + sanctioned.outer).toBe(0);
   });
 });
 
