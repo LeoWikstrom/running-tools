@@ -12,6 +12,9 @@ export interface WikidataItem {
   lon: number;
   sitelinks: number;
   heritage: boolean;
+  /** Carries a Wikidata dissolution/demolition (P576) or closure (P3999)
+      date — the place no longer exists. */
+  defunct: boolean;
   types: string[];
   website?: string;
   image?: string;
@@ -52,6 +55,7 @@ function buildQuery(
   return `
 SELECT ?item ?itemLabel ?lat ?lon ?sitelinks
        (SAMPLE(?heritageV) AS ?heritage)
+       (SAMPLE(?defunctV) AS ?defunct)
        (SAMPLE(?websiteV) AS ?website)
        (SAMPLE(?imageV) AS ?image)
        ${articleSelect}
@@ -66,6 +70,8 @@ WHERE {
   FILTER(?sitelinks > 0)
   OPTIONAL { ?item wdt:P31 ?typeV . }
   OPTIONAL { ?item wdt:P1435 ?heritageV . }
+  OPTIONAL { ?item wdt:P576 ?defunctV . }
+  OPTIONAL { ?item wdt:P3999 ?defunctV . }
   OPTIONAL { ?item wdt:P856 ?websiteV . }
   OPTIONAL { ?item wdt:P18 ?imageV . }
   ${articleWhere}
@@ -115,6 +121,7 @@ export function parseSparqlResults(
       lon,
       sitelinks: Number(b.sitelinks?.value ?? 0),
       heritage: b.heritage !== undefined,
+      defunct: b.defunct !== undefined,
       types: (b.types?.value ?? '').split(',').filter((t) => t.length > 0),
       website: b.website?.value,
       image: b.image?.value,
@@ -167,6 +174,7 @@ export function itemsToCandidates(items: WikidataItem[]): PlaceCandidate[] {
       wikipedias: i.articles,
       sitelinks: i.sitelinks,
       heritage: i.heritage || undefined,
+      defunct: i.defunct || undefined,
       types: i.types,
       website: i.website,
       image: i.image,

@@ -16,6 +16,9 @@ interface RunTourBridge {
   startRun(tourId: string): void;
   runState(): string;
   runAction(action: string): void;
+  /** Absent on APKs older than background downloads: a foreground-service
+      notification that keeps a minimised app downloading. Empty text ends it. */
+  downloadStatus?(text: string): void;
 }
 
 declare global {
@@ -35,6 +38,16 @@ export interface TourInfo {
 }
 
 export const native: RunTourBridge | undefined = window.RunTour;
+
+/** Show/update the download notification in the APK; a no-op on the web.
+    Empty text takes it down. */
+export function downloadNotice(text: string): void {
+  try {
+    native?.downloadStatus?.(text);
+  } catch {
+    // An old APK without the method must never break a download.
+  }
+}
 
 let nextCallback = 1;
 const pending = new Map<number, { resolve: (s: string) => void; reject: (e: Error) => void }>();

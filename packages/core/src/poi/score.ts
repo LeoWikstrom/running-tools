@@ -79,12 +79,49 @@ export const EXCLUDED_WIKIDATA = new Set([
   'Q127448', // municipality of Sweden
   'Q2983893', // quarter/district
   'Q123705', // neighborhood
+  'Q7969215', // ward of the City of London (en:Bishopsgate is one, not a gate)
+  'Q185441', // electoral ward
   'Q12813115', // urban area of Sweden
   'Q1907114', // metropolitan area
   'Q13220204', // second-level administrative division
 ]);
 
+/**
+ * Events: things that happened at a coordinate rather than things standing
+ * there — crashes, battles, disasters. Exact P31 ids (the SPARQL carries no
+ * subclass closure), best effort over what city tours actually surfaced.
+ */
+const EVENT_WIKIDATA = new Set([
+  'Q1190554', // occurrence
+  'Q1656682', // event
+  'Q13418847', // historical event
+  'Q1078765', // railway accident
+  'Q1620824', // train wreck
+  'Q744913', // aviation accident
+  'Q9687', // traffic collision
+  'Q3839081', // disaster
+  'Q8065', // natural disaster
+  'Q3196', // fire
+  'Q168983', // conflagration
+  'Q179057', // explosion
+  'Q178561', // battle
+  'Q188055', // siege
+  'Q3199915', // massacre
+  'Q2223653', // terrorist attack
+  'Q124757', // riot
+  'Q7944', // earthquake
+  'Q8068', // flood
+  'Q906512', // shipwrecking
+]);
+
+export function isEventPlace(c: PlaceCandidate): boolean {
+  return c.types.some((t) => EVENT_WIKIDATA.has(t));
+}
+
 export function isExcludedType(c: PlaceCandidate): boolean {
+  // A dissolved, demolished or closed place (Wikidata P576/P3999) is never
+  // tour material — a spur to a restaurant that no longer exists is wasted.
+  if (c.defunct) return true;
   return c.types.some((t) => EXCLUDED_WIKIDATA.has(t));
 }
 

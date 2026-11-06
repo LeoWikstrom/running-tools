@@ -1,5 +1,11 @@
 import { dedupeCandidates } from '@running/core/poi/pipeline';
-import { interestScore, isExcludedType } from '@running/core/poi/score';
+import {
+  interestScore,
+  isEventPlace,
+  isExcludedType,
+  isSquarePlace,
+  isStreetPlace,
+} from '@running/core/poi/score';
 import type { PlaceCandidate } from '@running/core/poi/types';
 import { findCoveringArea, loadAreaPlaces } from '@running/core/net/areaStore';
 import { fetchOsmPlaces, elementsToCandidates } from '@running/core/poi/osm';
@@ -29,6 +35,13 @@ export interface GenerateParams {
   twistSlider: number;
   /** Only route over places with a Wikipedia page in this language. */
   requireLang: string | null;
+  /** The same skip-streets/squares settings the shown places honour — the
+      pool must not reward the course for visiting a place the editor will
+      then hide, or the detour to it reads as pure madness on the map. */
+  excludeStreets: boolean;
+  excludeSquares: boolean;
+  /** Events (crashes, battles) are skipped unless explicitly included. */
+  excludeEvents: boolean;
   /** Places already narrated by saved tours: still allowed, but cheap enough
       that the beam prefers fresh ground. */
   visited: { lat: number; lon: number; id?: string }[];
@@ -69,6 +82,8 @@ function sliderWeights(p: GenerateParams): Partial<TourWeights> {
     lengthDiff: 0.02 + ((100 - p.placesSlider) / 100) * 0.08,
     // Nearly double the core default: a 150 m out-and-back costs ~22 points,
     // so only a spur that actually collects a decent place pays for itself.
+    // (0.35 and far stricter regimes were tried and reverted — see
+    // docs/course-quality-experiments.md.)
     repeat: 0.15,
     // Pedestrian only: safety penalties bite hard.
     penalty: 0.02 + ((100 - p.pedestrianSlider) / 100) * 0.12,
@@ -82,25 +97,113 @@ function sliderWeights(p: GenerateParams): Partial<TourWeights> {
   };
 }
 
-/** The three sources around one point, deduped — also what an area download stores. */
+/** Sub-circle radius for chunked place fetches: one SPARQL/geosearch over a
+    whole dense-city area times out server-side or silently truncates at the
+    API's 500-page cap (central London taught both lessons at once). */
+const CHUNK_RADIUS_M = 1000;
+/** Concurrent sub-circle requests — a guest's pace on WDQS/Wikipedia. */
+const CHUNK_CONCURRENCY = 4;
+
+/** A square grid of sub-circle centers covering the circle. */
+function circleCenters(
+  center: { lat: number; lon: number },
+  radiusM: number,
+  chunkM: number,
+): { lat: number; lon: number }[] {
+  if (radiusM <= chunkM * 1.2) return [center];
+  const stepM = chunkM * 1.2;
+  const latStep = stepM / 111_320;
+  const lonStep = latStep / Math.cos((center.lat * Math.PI) / 180);
+  const n = Math.ceil(radiusM / stepM);
+  const out: { lat: number; lon: number }[] = [];
+  for (let i = -n; i <= n; i++) {
+    for (let j = -n; j <= n; j++) {
+      const lat = center.lat + i * latStep;
+      const lon = center.lon + j * lonStep;
+      // Keep chunks whose circle reaches into the requested one.
+      if (haversineMeters(center.lat, center.lon, lat, lon) <= radiusM + chunkM / 2) {
+        out.push({ lat, lon });
+      }
+    }
+  }
+  return out;
+}
+
+async function inBatches<T>(jobs: (() => Promise<T>)[], width: number): Promise<PromiseSettledResult<T>[]> {
+  const out: PromiseSettledResult<T>[] = [];
+  for (let i = 0; i < jobs.length; i += width) {
+    out.push(...(await Promise.allSettled(jobs.slice(i, i + width).map((j) => j()))));
+  }
+  return out;
+}
+
+export interface AreaCandidates {
+  candidates: PlaceCandidate[];
+  /** Source families that failed entirely — a saved area without Wikidata
+      ranks every place near zero, which must not happen silently. */
+  failures: string[];
+}
+
+/** The three sources around one point, deduped — also what an area download
+    stores. Wikipedia and Wikidata are fetched per ~1 km sub-circle with
+    bounded concurrency, so a dense city cannot time out or truncate them. */
 export async function fetchAreaCandidates(
   center: { lat: number; lon: number },
   radiusM: number,
   localLang: string,
-): Promise<PlaceCandidate[]> {
+): Promise<AreaCandidates> {
   const r = Math.min(radiusM, GEOSEARCH_MAX_M);
   const langs = localLang && localLang !== 'en' ? ['en', localLang] : ['en'];
-  const batches = await Promise.allSettled([
-    ...langs.map(async (lang) =>
-      pagesToCandidates(lang, await geosearch(lang, center.lat, center.lon, r)),
-    ),
-    (async () =>
-      itemsToCandidates(await fetchItemsAround(center.lat, center.lon, r / 1000, { wikiLangs: langs })))(),
-    (async () => elementsToCandidates(await fetchOsmPlaces([center.lat], [center.lon], r)))(),
-  ]);
-  const all = batches.flatMap((b) => (b.status === 'fulfilled' ? b.value : []));
+  const centers = circleCenters(center, r, CHUNK_RADIUS_M);
+  const chunkR = centers.length === 1 ? r : CHUNK_RADIUS_M;
+
+  const osmPromise = (async () =>
+    elementsToCandidates(await fetchOsmPlaces([center.lat], [center.lon], r)))();
+  osmPromise.catch(() => undefined);
+  const wikiJobs: { source: string; run: () => Promise<PlaceCandidate[]> }[] = [];
+  const wdJobs: { source: string; run: () => Promise<PlaceCandidate[]> }[] = [];
+  for (const c of centers) {
+    for (const lang of langs) {
+      wikiJobs.push({
+        source: `Wikipedia (${lang})`,
+        run: async () => pagesToCandidates(lang, await geosearch(lang, c.lat, c.lon, chunkR)),
+      });
+    }
+    wdJobs.push({
+      source: 'Wikidata',
+      run: async () =>
+        itemsToCandidates(await fetchItemsAround(c.lat, c.lon, chunkR / 1000, { wikiLangs: langs })),
+    });
+  }
+  // Wikidata runs one chunk at a time: the query service rate-limits bursts,
+  // and a lost Wikidata leg flattens every interest score below the
+  // collection threshold (sitelinks are 40 % of it). Sequential chunks let
+  // its per-call Retry-After handling actually work.
+  const settled = [
+    ...(await inBatches(wikiJobs.map((j) => j.run), CHUNK_CONCURRENCY)),
+    ...(await inBatches(wdJobs.map((j) => j.run), 1)),
+  ];
+  const jobs = [...wikiJobs, ...wdJobs];
+  const succeeded = new Set<string>();
+  const attempted = new Set<string>();
+  const all: PlaceCandidate[] = [];
+  settled.forEach((b, i) => {
+    attempted.add(jobs[i]!.source);
+    if (b.status === 'fulfilled') {
+      succeeded.add(jobs[i]!.source);
+      all.push(...b.value);
+    }
+  });
+  attempted.add('OpenStreetMap');
+  try {
+    all.push(...(await osmPromise));
+    succeeded.add('OpenStreetMap');
+  } catch {
+    // Reported through failures below.
+  }
   if (all.length === 0) throw new Error('No place source reachable. Are you online?');
-  return dedupeCandidates(all);
+  const failures = [...attempted].filter((s) => !succeeded.has(s));
+  return { candidates: dedupeCandidates(all), failures };
 }
 
 async function placesAround(
@@ -113,9 +216,12 @@ async function placesAround(
   const candidates =
     stored && stored.length > 0
       ? stored.filter((c) => haversineMeters(center.lat, center.lon, c.lat, c.lon) <= radiusM)
-      : await fetchAreaCandidates(center, radiusM, p.localLang);
+      : (await fetchAreaCandidates(center, radiusM, p.localLang)).candidates;
   const out: TourSearchPlace[] = candidates
     .filter((c) => !isExcludedType(c))
+    .filter((c) => !(p.excludeStreets && isStreetPlace(c)))
+    .filter((c) => !(p.excludeSquares && isSquarePlace(c)))
+    .filter((c) => !(p.excludeEvents && isEventPlace(c)))
     .filter(
       (c) =>
         !p.requireLang ||
@@ -135,6 +241,15 @@ async function placesAround(
       );
       return seen ? { ...c, score: Math.max(1, Math.round(c.score * VISITED_SCORE_FACTOR)) } : c;
     });
+  if (out.length === 0 && candidates.length > 0 && !candidates.some((c) => c.sitelinks !== undefined)) {
+    // Candidates exist but none carries Wikidata ranking — without sitelinks
+    // (40 % of the score) nothing can reach the threshold, and saying "no
+    // places" beside a world landmark would be nonsense.
+    throw new Error(
+      'The place ranking data (Wikidata) is missing here, so every place ranks as unknown. ' +
+        'Try again in a minute — or re-download the area if it was saved during an outage.',
+    );
+  }
   // Vias join the pool as required — a via already in it is simply marked.
   for (const via of p.vias) {
     const near = out.find(

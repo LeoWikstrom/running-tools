@@ -19,6 +19,9 @@ export interface PlaceCandidate {
   sitelinks?: number;
   /** Has a heritage designation (Wikidata P1435). */
   heritage?: boolean;
+  /** Dissolved, demolished or closed per Wikidata (P576/P3999) — a tour
+      must not route past a place that no longer exists. */
+  defunct?: boolean;
   /** Wikidata P31 ids and/or OSM tag values like historic=castle. */
   types: string[];
   website?: string;
@@ -53,6 +56,9 @@ export interface PoiSettings {
   /** Drop streets/squares as places — you are standing on them anyway. */
   excludeStreets: boolean;
   excludeSquares: boolean;
+  /** Drop events (crashes, battles, disasters) — a coordinate where
+      something once happened is not a place to see. Opt-in to keep them. */
+  excludeEvents: boolean;
 }
 
 export const DEFAULT_POI_SETTINGS: PoiSettings = {
@@ -64,4 +70,5 @@ export const DEFAULT_POI_SETTINGS: PoiSettings = {
   maxPlaces: 25,
   excludeStreets: false,
   excludeSquares: false,
+  excludeEvents: true,
 };

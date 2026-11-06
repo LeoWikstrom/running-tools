@@ -1,6 +1,6 @@
 import { haversineMeters } from '../geo';
 import { buildBuildingIndex, type BuildingPoly } from '../geo/los';
-import { hasSignal, interestScore, isExcludedType, isSquarePlace, isStreetPlace } from './score';
+import { hasSignal, interestScore, isEventPlace, isExcludedType, isSquarePlace, isStreetPlace } from './score';
 import { DEFAULT_POI_SETTINGS, type Place, type PlaceCandidate, type PoiSettings } from './types';
 
 /** Along-course gap that separates two passes of the same spot. */
@@ -157,6 +157,7 @@ function mergeInto(target: PlaceCandidate, extra: PlaceCandidate): void {
   target.pageLength = Math.max(target.pageLength ?? 0, extra.pageLength ?? 0) || undefined;
   target.sitelinks = Math.max(target.sitelinks ?? 0, extra.sitelinks ?? 0) || undefined;
   if (extra.heritage) target.heritage = true;
+  if (extra.defunct) target.defunct = true;
   for (const t of extra.types) if (!target.types.includes(t)) target.types.push(t);
   target.website ??= extra.website;
   target.image ??= extra.image;
@@ -231,7 +232,8 @@ export function buildPlaces(
       hasSignal(c) &&
       !isExcludedType(c) &&
       !(s.excludeStreets && isStreetPlace(c)) &&
-      !(s.excludeSquares && isSquarePlace(c)),
+      !(s.excludeSquares && isSquarePlace(c)) &&
+      !(s.excludeEvents && isEventPlace(c)),
   );
 
   // Line of sight: a place stays if enough of the window around its first

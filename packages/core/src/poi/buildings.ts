@@ -32,7 +32,9 @@ export function buildBuildingsQuery(
     coords.push(lats[i]!.toFixed(5), lons[i]!.toFixed(5));
   }
   const around = `(around:${Math.round(widthMeters)},${coords.join(',')})`;
-  return `[out:json][timeout:60];way[building]${around};out geom;`;
+  // skel: only the geometry is read — building tags (UK address tags
+  // especially) are a large share of the payload.
+  return `[out:json][timeout:60];way[building]${around};out skel geom;`;
 }
 
 export function elementsToBuildings(elements: GeomWayElement[]): BuildingPoly[] {
@@ -70,7 +72,7 @@ export async function fetchAreaBuildings(
     quadrantBoxes(center, radiusMeters).map((b, q) => {
       const box = `(${b.south.toFixed(6)},${b.west.toFixed(6)},${b.north.toFixed(6)},${b.east.toFixed(6)})`;
       return fetchOverpass(
-        `[out:json][timeout:120];way[building]${box};out geom;`,
+        `[out:json][timeout:120];way[building]${box};out skel geom;`,
         `${keyBase}:q${q}`,
         { ...options, endpoints: [0, 1, 2, 3].map((i) => (q + i) % 4), race: 1 },
       );

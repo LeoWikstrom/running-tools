@@ -405,6 +405,29 @@ button {
   z-index: 900;
 }
 
+/* Prune-mode bar over the map: undo/redo where the eyes already are. */
+#prune-bar {
+  position: fixed;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 900;
+  background: color-mix(in srgb, Canvas 86%, transparent);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+#prune-bar[hidden] {
+  display: none;
+}
+
+#prune-bar button {
+  min-height: 36px;
+  padding: 0 14px;
+}
+
 #preview-controls .row {
   /* One slim row, always — the controls are few and short on purpose. */
   flex-wrap: nowrap;
@@ -522,6 +545,22 @@ details.section[open] > summary::after {
 
 .section-body input[type='range'] {
   width: 100%;
+}
+
+/* ↺ beside each slider, back to the default value (RaceTwin's pattern). */
+.slider-reset {
+  width: 34px;
+  min-height: 28px;
+  padding: 0;
+  margin-left: 8px;
+  font-size: 1rem;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+input[type='range']:has(+ .slider-reset) {
+  width: calc(100% - 48px) !important;
+  vertical-align: middle;
 }
 
 details.section::details-content {

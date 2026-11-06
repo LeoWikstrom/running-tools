@@ -10,6 +10,11 @@
   </head>
   <body>
     <div id="map"></div>
+    <div id="prune-bar" hidden>
+      <button id="prune-undo" title="Undo prune" aria-label="Undo prune" disabled>↶</button>
+      <button id="prune-redo" title="Redo prune" aria-label="Redo prune" disabled>↷</button>
+      <button id="prune-done">Done</button>
+    </div>
     <div id="map-buttons">
       <button id="locate-btn" aria-pressed="false" aria-label="Show my position" title="Show my position">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
@@ -83,6 +88,7 @@
             />
           </label>
           <button id="gen-run">Generate</button>
+          <button id="gen-prune" hidden aria-pressed="false">Prune spurs by hand</button>
         </div>
         <div id="bus-section" class="bus-only">
           <p class="hint" id="bus-hint">
@@ -156,12 +162,16 @@
               Show the preview bar over the map
             </label>
             <label class="check">
-              <input type="checkbox" id="skip-streets" />
-              Skip streets as places
+              <input type="checkbox" id="include-streets" />
+              Include streets as places
             </label>
             <label class="check">
-              <input type="checkbox" id="skip-squares" />
-              Skip squares as places
+              <input type="checkbox" id="include-squares" />
+              Include squares as places
+            </label>
+            <label class="check">
+              <input type="checkbox" id="include-events" />
+              Include events (crashes, battles, disasters)
             </label>
             <label class="control run-only">
               <span>More places ↔ more direct</span>
@@ -190,7 +200,9 @@
               </div>
               <p class="hint">
                 Downloads the paths around the start once; generating inside a saved area skips
-                the unreliable Overpass servers.
+                the unreliable Overpass servers. Traveling? Download the destination before the
+                trip — outside Sweden the download leans on those servers and can take many
+                minutes, so it is best done at home, in advance.
               </p>
               <p class="hint" id="area-status" hidden></p>
               <ul id="area-list" hidden></ul>

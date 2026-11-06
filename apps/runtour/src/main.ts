@@ -2,6 +2,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { parseGpx, type GpxPoint } from '@running/core/gpx/parse';
 import { haversineMeters } from '@running/core/geo';
+import { findPointSpurs } from '@running/core/geo/spurs';
 import { buildPlaces, firstPassProjection } from '@running/core/poi/pipeline';
 import { interestScore } from '@running/core/poi/score';
 import type { Place, PlaceCandidate } from '@running/core/poi/types';
@@ -36,7 +37,7 @@ import {
   type GenerationContext,
 } from './generate';
 import { startSimulatedPreview, type PreviewHandle, type PreviewPlace } from './preview';
-import { listTours, native, saveTourToPhone, getTourJson } from './native';
+import { downloadNotice, listTours, native, saveTourToPhone, getTourJson } from './native';
 import { loadSession, saveSession } from './session';
 import { translatorAvailable } from './translate';
 import { initRunMode } from './run';
@@ -231,6 +232,10 @@ function setCourse(name: string, points: GpxPoint[]): void {
   stats.hidden = false;
   hint.hidden = true;
   placesRow.hidden = false;
+  genPruneBtn.hidden = false;
+  pruneUndo = [];
+  pruneRedo = [];
+  setPruneMode(false);
   genContext = null;
   setStatus('');
   reflectGenButtons();
@@ -255,6 +260,92 @@ function updateCourseGeometry(pts: [number, number][]): void {
   ).addTo(map);
   stats.textContent = `${course.name} — ${(distance / 1000).toFixed(1)} km, ${points.length} points`;
 }
+
+/**
+ * Manual spur pruning: red dots mark every out-and-back tip; tapping one
+ * splices that spur out of the course. The automatic pruner (tourBeam)
+ * respects the asked length, so some filler always survives — this mode is
+ * for the runner who would rather run short than run silly.
+ */
+const genPruneBtn = el<HTMLButtonElement>('gen-prune');
+const pruneBar = el<HTMLDivElement>('prune-bar');
+const pruneUndoBtn = el<HTMLButtonElement>('prune-undo');
+const pruneRedoBtn = el<HTMLButtonElement>('prune-redo');
+const pruneDoneBtn = el<HTMLButtonElement>('prune-done');
+const pruneLayer = L.layerGroup().addTo(map);
+let pruneMode = false;
+let pruneUndo: GpxPoint[][] = [];
+let pruneRedo: GpxPoint[][] = [];
+
+function reflectPruneHistory(): void {
+  pruneUndoBtn.disabled = pruneUndo.length === 0;
+  pruneRedoBtn.disabled = pruneRedo.length === 0;
+}
+
+function applyPrunePoints(points: GpxPoint[]): void {
+  // The spliced course no longer matches the generated edge path.
+  genContext = null;
+  updateCourseGeometry(points.map((p) => [p.lat, p.lon] as [number, number]));
+  if (candidates.length > 0) recompute();
+  renderPruneMarkers();
+  reflectPruneHistory();
+}
+
+function renderPruneMarkers(): void {
+  pruneLayer.clearLayers();
+  if (!pruneMode || !course) return;
+  const spurs = findPointSpurs(course.lats, course.lons);
+  for (const spur of spurs) {
+    L.circleMarker([course.lats[spur.tip]!, course.lons[spur.tip]!], {
+      radius: 9,
+      color: '#c62828',
+      fillColor: '#ffffff',
+      fillOpacity: 0.9,
+      weight: 3,
+    })
+      .bindTooltip(`Remove this ${(spur.lengthM / 1000).toFixed(2)} km out-and-back`)
+      .on('click', () => {
+        if (!course) return;
+        pruneUndo.push(course.points);
+        pruneRedo = [];
+        applyPrunePoints(course.points.filter((_, i) => i <= spur.from || i > spur.to));
+        toast(`Spur removed — ${(course!.distance / 1000).toFixed(2)} km now.`);
+      })
+      .addTo(pruneLayer);
+  }
+  setStatus(
+    spurs.length === 0
+      ? 'No out-and-back spurs found on this course.'
+      : `${spurs.length} out-and-back${spurs.length > 1 ? 's' : ''} marked — tap a red dot to remove it.`,
+  );
+}
+
+pruneUndoBtn.addEventListener('click', () => {
+  const prev = pruneUndo.pop();
+  if (!prev || !course) return;
+  pruneRedo.push(course.points);
+  applyPrunePoints(prev);
+});
+
+pruneRedoBtn.addEventListener('click', () => {
+  const next = pruneRedo.pop();
+  if (!next || !course) return;
+  pruneUndo.push(course.points);
+  applyPrunePoints(next);
+});
+
+function setPruneMode(on: boolean): void {
+  pruneMode = on;
+  genPruneBtn.setAttribute('aria-pressed', String(on));
+  genPruneBtn.textContent = on ? 'Done pruning' : 'Prune spurs by hand';
+  pruneBar.hidden = !on;
+  if (!on) setStatus('');
+  reflectPruneHistory();
+  renderPruneMarkers();
+}
+
+genPruneBtn.addEventListener('click', () => setPruneMode(!pruneMode));
+pruneDoneBtn.addEventListener('click', () => setPruneMode(false));
 
 /** A removed place may have been the sole reason for a detour; re-improve the
     generated course without it so the detour can straighten. */
@@ -554,8 +645,9 @@ function recompute(): void {
         leadDistance: VARIANT_DEFAULTS.leadDistance,
         minSpacing: VARIANT_DEFAULTS.minSpacing,
         corridorWidth: VARIANT_DEFAULTS.corridorWidth,
-        excludeStreets: skipStreetsBox.checked,
-        excludeSquares: skipSquaresBox.checked,
+        excludeStreets: !includeStreetsBox.checked,
+        excludeSquares: !includeSquaresBox.checked,
+        excludeEvents: !includeEventsBox.checked,
       },
       removedIds,
       buildings,
@@ -746,13 +838,19 @@ showPreviewBox.addEventListener('change', () => {
 });
 
 // Streets and squares as narration subjects are a taste; both persisted.
-const skipStreetsBox = el<HTMLInputElement>('skip-streets');
-const skipSquaresBox = el<HTMLInputElement>('skip-squares');
-skipStreetsBox.checked = localStorage.getItem('runtour.skipStreets') === '1';
-skipSquaresBox.checked = localStorage.getItem('runtour.skipSquares') === '1';
+// Include-style options, all default off: streets, squares and events stay
+// out of tours unless asked for (London showed what street-places do to a
+// course). The old skip-* localStorage keys are deliberately abandoned.
+const includeStreetsBox = el<HTMLInputElement>('include-streets');
+const includeSquaresBox = el<HTMLInputElement>('include-squares');
+const includeEventsBox = el<HTMLInputElement>('include-events');
+includeStreetsBox.checked = localStorage.getItem('runtour.includeStreets') === '1';
+includeSquaresBox.checked = localStorage.getItem('runtour.includeSquares') === '1';
+includeEventsBox.checked = localStorage.getItem('runtour.includeEvents') === '1';
 for (const [box, key] of [
-  [skipStreetsBox, 'runtour.skipStreets'],
-  [skipSquaresBox, 'runtour.skipSquares'],
+  [includeStreetsBox, 'runtour.includeStreets'],
+  [includeSquaresBox, 'runtour.includeSquares'],
+  [includeEventsBox, 'runtour.includeEvents'],
 ] as const) {
   box.addEventListener('change', () => {
     localStorage.setItem(key, box.checked ? '1' : '0');
@@ -1152,6 +1250,24 @@ const genTwists = el<HTMLInputElement>('gen-twists');
 const genRun = el<HTMLButtonElement>('gen-run');
 const genStatus = el<HTMLParagraphElement>('gen-status');
 
+// Every slider gets a ↺ back to its default, RaceTwin's weights pattern.
+for (const slider of document.querySelectorAll<HTMLInputElement>('input[type="range"]')) {
+  const reset = document.createElement('button');
+  reset.type = 'button';
+  reset.className = 'slider-reset';
+  reset.textContent = '↺';
+  reset.title = `Reset to default (${slider.defaultValue})`;
+  reset.setAttribute('aria-label', `Reset to default, ${slider.defaultValue}`);
+  reset.addEventListener('click', (e) => {
+    // Inside a label the click would also activate the slider.
+    e.preventDefault();
+    slider.value = slider.defaultValue;
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  slider.insertAdjacentElement('afterend', reset);
+}
+
 let genStart: { lat: number; lon: number } | null = null;
 let genEnd: { lat: number; lon: number } | null = null;
 let genStartMarker: L.Marker | null = null;
@@ -1190,6 +1306,10 @@ function clearCourse(): void {
   stopPreview();
   course = null;
   genContext = null;
+  pruneUndo = [];
+  pruneRedo = [];
+  setPruneMode(false);
+  genPruneBtn.hidden = true;
   tourId = null;
   courseCum = null;
   candidates = [];
@@ -1466,6 +1586,9 @@ function startGeneration(): void {
       centreSlider: Number(genCentre.value),
       twistSlider: Number(genTwists.value),
       requireLang: nativeOnly() ? narrationLang() : null,
+      excludeStreets: !includeStreetsBox.checked,
+      excludeSquares: !includeSquaresBox.checked,
+      excludeEvents: !includeEventsBox.checked,
       visited: visitedPlaces(),
       vias: vias.map((v) => ({
         id: viaId(v),
@@ -1488,7 +1611,11 @@ function startGeneration(): void {
       for (const v of vias) addManualPlace(v);
       render();
       setGenStatus(
-        `${(generated.lengthM / 1000).toFixed(2)} km touching ${generated.collected.length} places.`,
+        // Collected counts the beam's deliberate high-interest targets; the
+        // full place list (every tellable thing in the corridor) comes from
+        // the places step and is usually longer.
+        `${(generated.lengthM / 1000).toFixed(2)} km, routed via ${generated.collected.length} ` +
+          `high-interest place${generated.collected.length === 1 ? '' : 's'} — finding everything else along it…`,
       );
       if (await runFindPlaces()) {
         await runFetchTexts();
@@ -1549,37 +1676,65 @@ async function renderAreas(): Promise<void> {
 async function downloadArea(
   center: { lat: number; lon: number },
   radiusM: number,
+  reportStatus: (text: string) => void,
+): Promise<void> {
+  // The APK shows the status as a foreground-service notification, which
+  // keeps the download alive while the app is minimised.
+  const onStatus = (text: string): void => {
+    reportStatus(text);
+    downloadNotice(text);
+  };
+  try {
+    await downloadAreaInner(center, radiusM, onStatus);
+  } finally {
+    downloadNotice('');
+  }
+}
+
+async function downloadAreaInner(
+  center: { lat: number; lon: number },
+  radiusM: number,
   onStatus: (text: string) => void,
 ): Promise<void> {
   onStatus('Downloading the network, places and buildings…');
-  // The three downloads are independent, so they run concurrently: the wall
-  // time is the slowest of them, not the sum. Places and buildings failures
-  // stay tolerable; only the network is make-or-break for the area.
+  // The downloads are independent and run concurrently: the wall time is the
+  // slowest of them, not the sum. Places and buildings failures stay
+  // tolerable; only the network is make-or-break for the area.
   const placesPromise = fetchAreaCandidates(center, radiusM, langInput.value.trim().toLowerCase());
-  const buildingsPromise = fetchAreaBuildings(center, radiusM, { headerTimeoutMs: 120_000 });
   placesPromise.catch(() => undefined);
-  buildingsPromise.catch(() => undefined);
   // Pre-baked tiles first (CDN-fast inside Sweden); otherwise Overpass with
   // four quadrants on four mirrors — four queue tickets, all useful.
   const tiled = await fetchNetworkTiles(center, radiusM, {
     onTile: (done, total) => onStatus(`Downloading the path network… tile ${done}/${total}.`),
   }).catch(() => null);
+  // Outside the tiles, network and buildings are both quadrant-parallel
+  // Overpass work — eight concurrent queries on four mirrors only throttle
+  // each other (central London taught this), so there buildings wait their
+  // turn. On tiles, both are CDN fetches and overlap freely.
+  const buildingsPromise = tiled
+    ? fetchAreaBuildings(center, radiusM, { headerTimeoutMs: 120_000 })
+    : null;
+  buildingsPromise?.catch(() => undefined);
   const response =
     tiled ?? (await fetchNetworkParallel(center, radiusM, { headerTimeoutMs: 120_000 }));
+  const startedBuildings =
+    buildingsPromise ?? fetchAreaBuildings(center, radiusM, { headerTimeoutMs: 120_000 });
+  startedBuildings.catch(() => undefined);
   const area = await saveArea(center, radiusM, response);
   onStatus('Network saved. Waiting for the places…');
   try {
-    const found = await placesPromise;
+    const { candidates: found, failures } = await placesPromise;
     await saveAreaPlaces(area.id, found);
-    onStatus(`Area saved with ${found.length} places — courses here now generate offline.`);
-    toast(`Area saved with ${found.length} places.`);
+    const warn = failures.length > 0 ? ` (${failures.join(', ')} failed — ranking may suffer)` : '';
+    onStatus(`Area saved with ${found.length} places${warn} — courses here now generate offline.`);
+    toast(`Area saved with ${found.length} places${warn}.`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     onStatus(`Network saved, but the places fetch failed (${message}) — download again.`);
   }
   try {
     onStatus('Waiting for the buildings (line of sight)…');
-    const footprints = await buildingsPromise;
+    const footprints = await startedBuildings;
     await saveAreaBuildings(area.id, footprints);
     onStatus(`Area saved: buildings too (${footprints.length}).`);
   } catch {

@@ -388,6 +388,25 @@ public class MainActivity extends Activity {
         }
 
         /**
+         * Area-download notification: non-empty text starts/updates the
+         * dataSync foreground service that keeps a minimised app
+         * downloading; empty text takes it down. Started while the page is
+         * visible, so the foreground-start restriction never applies.
+         */
+        @JavascriptInterface
+        public void downloadStatus(String text) {
+            Intent intent = new Intent(MainActivity.this, DownloadService.class)
+                    .setAction(DownloadService.ACTION_STATUS)
+                    .putExtra(DownloadService.EXTRA_TEXT, text == null ? "" : text);
+            try {
+                if (text != null && !text.isEmpty()) startForegroundService(intent);
+                else startService(intent);
+            } catch (Exception ignored) {
+                // A refused service start must never break the download itself.
+            }
+        }
+
+        /**
          * System TTS into files/tours/&lt;id&gt;/&lt;filename&gt;; resolves the JS
          * callback when the file is written. Queued inside TextToSpeech, so
          * sequential calls are fine.
