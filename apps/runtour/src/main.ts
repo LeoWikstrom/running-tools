@@ -23,6 +23,7 @@ import {
 } from '@running/core/tour/types';
 import { fetchHistoricalImage } from './images';
 import {
+  areaIsCurrent,
   deleteArea,
   findCoveringArea,
   listAreas,
@@ -1829,7 +1830,8 @@ async function renderAreas(): Promise<void> {
       const span = document.createElement('span');
       span.textContent =
         `${(a.radiusMeters / 1000).toFixed(1)} km around ${a.lat.toFixed(3)}, ` +
-        `${a.lon.toFixed(3)} — ${a.ways} ways`;
+        `${a.lon.toFixed(3)} — ${a.ways} ways` +
+        (areaIsCurrent(a) ? '' : ' — outdated, download again');
       const del = document.createElement('button');
       del.textContent = '✕';
       del.setAttribute('aria-label', 'Delete this area');

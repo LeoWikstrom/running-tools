@@ -2,6 +2,7 @@ import { buildTargetProfile, SAMPLE_STEP_M, sliceProfile, type TargetProfile } f
 import { parseGpx, type ParsedGpx } from '@running/core/gpx/parse';
 import { SURFACE_PRESETS } from '@running/core/search/score';
 import { haversineMeters } from '@running/core/geo';
+import { areaIsCurrent } from '@running/core/net/areaStore';
 import { downloadDoneNotice, downloadNotice } from './native';
 import { loadSession, requestPersistentStorage, saveSession } from './session';
 import type {
@@ -1332,7 +1333,9 @@ function renderAreas(areas: import('./shared/messages').AreaInfo[]): void {
   for (const a of areas) {
     const li = document.createElement('li');
     const date = new Date(a.savedAt).toISOString().slice(0, 10);
-    li.textContent = `${(a.radiusMeters / 1000).toFixed(0)} km @ ${a.lat.toFixed(3)}, ${a.lon.toFixed(3)} (${a.ways} ways, ${date}) `;
+    li.textContent =
+      `${(a.radiusMeters / 1000).toFixed(0)} km @ ${a.lat.toFixed(3)}, ${a.lon.toFixed(3)} ` +
+      `(${a.ways} ways, ${date})${areaIsCurrent(a) ? '' : ' — outdated, download again'} `;
     const del = document.createElement('button');
     del.textContent = 'Remove';
     del.style.width = 'auto';

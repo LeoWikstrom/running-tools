@@ -75,6 +75,8 @@ export interface AreaInfo {
   savedAt: number;
   ways: number;
   nodes: number;
+  /** Query-schema version; an old one is listed but never served. */
+  v?: number;
 }
 
 /** A stored GPS-trace download; `kept` of `points` were at a running pace. */

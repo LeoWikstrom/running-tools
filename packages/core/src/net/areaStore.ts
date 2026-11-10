@@ -5,8 +5,10 @@ import type { PlaceCandidate } from '../poi/types';
 import { cacheGet, cacheSet, cacheSetOrThrow } from './cache';
 import type { OverpassResponse } from './overpass';
 
-// Must match the version embedded in overpass.ts's cacheKey (`overpass:v4:`).
-const AREA_SCHEMA_VERSION = 4;
+// Must match the version embedded in overpass.ts's cacheKey (`overpass:v5:`).
+// v5: v4 areas predate the forbidden-zone (military) elements, and a stale
+// network routed a Halmstad tour straight through a regiment.
+const AREA_SCHEMA_VERSION = 5;
 
 export interface StoredArea {
   id: string;
@@ -24,6 +26,12 @@ const INDEX_KEY = 'areas:index';
 
 export async function listAreas(): Promise<StoredArea[]> {
   return (await cacheGet<StoredArea[]>(INDEX_KEY)) ?? [];
+}
+
+/** False for areas saved under an older query schema: still listed, never
+    served — download again to refresh. */
+export function areaIsCurrent(a: StoredArea): boolean {
+  return (a.v ?? 4) === AREA_SCHEMA_VERSION;
 }
 
 export async function saveArea(
@@ -92,9 +100,7 @@ export async function findCoveringArea(
   let best: StoredArea | null = null;
   for (const a of areas) {
     // Stale-schema entries are treated as absent so they get refetched.
-    // Entries from before versioning were all saved under the v4 query, so
-    // they are grandfathered rather than thrown away.
-    if ((a.v ?? 4) !== AREA_SCHEMA_VERSION) continue;
+    if (!areaIsCurrent(a)) continue;
     const d = haversineMeters(center.lat, center.lon, a.lat, a.lon);
     if (d + radiusMeters <= a.radiusMeters && (!best || a.radiusMeters < best.radiusMeters)) {
       best = a;
