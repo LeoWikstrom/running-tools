@@ -8,6 +8,7 @@ import {
   firstPassProjection,
 } from '../src/poi/pipeline';
 import { interestScore, hasSignal } from '../src/poi/score';
+import { searchLangs } from '../src/poi/langs';
 import { elementsToCandidates, type OsmPlaceElement } from '../src/poi/osm';
 import {
   geoPagesFromResponse,
@@ -109,6 +110,46 @@ describe('dedupeCandidates', () => {
       candidate({ name: 'Gothenburg Cathedral', wikidataId: 'Q1', wikipedia: { lang: 'en', title: 'Gothenburg Cathedral' } }),
     ]);
     expect(merged[0]!.wikipedia?.lang).toBe('en');
+  });
+
+  it('keeps both editions when the English page takes over as primary', () => {
+    const merged = dedupeCandidates([
+      candidate({ name: 'Colosseo', wikidataId: 'Q2', wikipedia: { lang: 'it', title: 'Colosseo' } }),
+      candidate({ name: 'Colosseum', wikidataId: 'Q2', wikipedia: { lang: 'en', title: 'Colosseum' } }),
+    ]);
+    expect(merged).toHaveLength(1);
+    const langs = [merged[0]!.wikipedia, ...(merged[0]!.wikipedias ?? [])].map((w) => w?.lang);
+    expect(langs).toContain('it');
+    expect(langs).toContain('en');
+  });
+
+  it('preserves first-occurrence order across merges', () => {
+    const merged = dedupeCandidates([
+      candidate({ name: 'Colosseo', wikidataId: 'Q2', wikipedia: { lang: 'it', title: 'Colosseo' } }),
+      candidate({ name: 'Pantheon', wikidataId: 'Q3', wikipedia: { lang: 'it', title: 'Pantheon' } }),
+      candidate({ name: 'Colosseum', wikidataId: 'Q2', wikipedia: { lang: 'en', title: 'Colosseum' } }),
+    ]);
+    expect(merged.map((c) => c.wikidataId)).toEqual(['Q2', 'Q3']);
+  });
+});
+
+describe('searchLangs', () => {
+  it('puts the narration language first, then English and the local one', () => {
+    expect(searchLangs('it', 'sv')).toEqual(['it', 'en', 'sv']);
+  });
+
+  it('searches only the narration edition with nativeOnly', () => {
+    expect(searchLangs('it', 'sv', true)).toEqual(['it']);
+  });
+
+  it('collapses duplicates', () => {
+    expect(searchLangs('en', 'en')).toEqual(['en']);
+    expect(searchLangs('it', 'it')).toEqual(['it', 'en']);
+  });
+
+  it('drops an empty local language and normalises case/space', () => {
+    expect(searchLangs('IT', ' ')).toEqual(['it', 'en']);
+    expect(searchLangs('sv', ' It ')).toEqual(['sv', 'en', 'it']);
   });
 });
 

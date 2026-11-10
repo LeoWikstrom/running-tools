@@ -3,6 +3,7 @@ import 'leaflet/dist/leaflet.css';
 import { parseGpx, type GpxPoint } from '@running/core/gpx/parse';
 import { haversineMeters } from '@running/core/geo';
 import { findPointSpurs } from '@running/core/geo/spurs';
+import { searchLangs } from '@running/core/poi/langs';
 import { buildPlaces, firstPassProjection } from '@running/core/poi/pipeline';
 import { interestScore } from '@running/core/poi/score';
 import type { Place, PlaceCandidate } from '@running/core/poi/types';
@@ -37,7 +38,14 @@ import {
   type GenerationContext,
 } from './generate';
 import { startSimulatedPreview, type PreviewHandle, type PreviewPlace } from './preview';
-import { downloadNotice, listTours, native, saveTourToPhone, getTourJson } from './native';
+import {
+  downloadDoneNotice,
+  downloadNotice,
+  listTours,
+  native,
+  saveTourToPhone,
+  getTourJson,
+} from './native';
 import { loadSession, saveSession } from './session';
 import { translatorAvailable } from './translate';
 import { initRunMode } from './run';
@@ -59,6 +67,10 @@ const nativeOnly = (): boolean =>
 
 const hasNarrationPage = (c: { wikipedia?: { lang: string }; wikipedias?: { lang: string }[] }): boolean =>
   [c.wikipedia, ...(c.wikipedias ?? [])].some((w) => w?.lang === narrationLang());
+
+/** Editions for place fetches: narration first, English and the local wiki after. */
+const fetchLangs = (nativeOnlySearch = false): string[] =>
+  searchLangs(narrationLang(), langInput.value.trim().toLowerCase(), nativeOnlySearch);
 
 document.body.classList.add(`variant-${VARIANT}`);
 document.title = APP_NAME;
@@ -795,12 +807,7 @@ async function runFindPlaces(): Promise<boolean> {
   if (!course) return false;
   findButton.disabled = true;
   try {
-    const report = await fetchCandidates(
-      course.lats,
-      course.lons,
-      langInput.value.trim().toLowerCase(),
-      setStatus,
-    );
+    const report = await fetchCandidates(course.lats, course.lons, fetchLangs(), setStatus);
     candidates = report.candidates;
     buildings = report.buildings;
     losIndex = buildings.length > 0 ? buildBuildingIndex(buildings) : null;
@@ -1081,7 +1088,7 @@ searchBtn.addEventListener('click', () => {
   toast('Searching…');
   void (async () => {
     try {
-      const found = await searchPlacesByName(text, langInput.value.trim().toLowerCase());
+      const found = await searchPlacesByName(text, fetchLangs(nativeOnly()));
       searchResults.innerHTML = '';
       searchResults.hidden = found.length === 0;
       setSearchStatus(
@@ -1092,7 +1099,10 @@ searchBtn.addEventListener('click', () => {
       for (const c of found) {
         const li = document.createElement('li');
         const btn = document.createElement('button');
-        btn.textContent = `${c.name} (${c.wikipedia?.lang ?? '?'})`;
+        const shown =
+          [c.wikipedia, ...(c.wikipedias ?? [])].find((w) => w?.lang === narrationLang()) ??
+          c.wikipedia;
+        btn.textContent = `${shown?.title ?? c.name} (${shown?.lang ?? '?'})`;
         btn.addEventListener('click', () => addManualPlace(c));
         li.appendChild(btn);
         searchResults.appendChild(li);
@@ -1580,7 +1590,7 @@ function startGeneration(): void {
       start: genStart,
       end: genEnd,
       targetLengthM: targetLength(),
-      localLang: langInput.value.trim().toLowerCase(),
+      searchLangs: fetchLangs(),
       placesSlider: Number(genPlaces.value),
       pedestrianSlider: Number(genPedestrian.value),
       centreSlider: Number(genCentre.value),
@@ -1680,14 +1690,20 @@ async function downloadArea(
 ): Promise<void> {
   // The APK shows the status as a foreground-service notification, which
   // keeps the download alive while the app is minimised.
+  let last = '';
   const onStatus = (text: string): void => {
+    last = text;
     reportStatus(text);
     downloadNotice(text);
   };
   try {
     await downloadAreaInner(center, radiusM, onStatus);
+  } catch (err) {
+    last = `Download failed: ${err instanceof Error ? err.message : String(err)}`;
+    throw err;
   } finally {
     downloadNotice('');
+    downloadDoneNotice(last);
   }
 }
 
@@ -1700,7 +1716,7 @@ async function downloadAreaInner(
   // The downloads are independent and run concurrently: the wall time is the
   // slowest of them, not the sum. Places and buildings failures stay
   // tolerable; only the network is make-or-break for the area.
-  const placesPromise = fetchAreaCandidates(center, radiusM, langInput.value.trim().toLowerCase());
+  const placesPromise = fetchAreaCandidates(center, radiusM, fetchLangs());
   placesPromise.catch(() => undefined);
   // Pre-baked tiles first (CDN-fast inside Sweden); otherwise Overpass with
   // four quadrants on four mirrors — four queue tickets, all useful.

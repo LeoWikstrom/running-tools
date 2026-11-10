@@ -19,6 +19,8 @@ interface RunTourBridge {
   /** Absent on APKs older than background downloads: a foreground-service
       notification that keeps a minimised app downloading. Empty text ends it. */
   downloadStatus?(text: string): void;
+  /** Absent on APKs older than the finished-download notice. */
+  downloadDone?(text: string): void;
 }
 
 declare global {
@@ -44,6 +46,15 @@ export const native: RunTourBridge | undefined = window.RunTour;
 export function downloadNotice(text: string): void {
   try {
     native?.downloadStatus?.(text);
+  } catch {
+    // An old APK without the method must never break a download.
+  }
+}
+
+/** A dismissible "download finished" notification in the APK; no-op on the web. */
+export function downloadDoneNotice(text: string): void {
+  try {
+    native?.downloadDone?.(text);
   } catch {
     // An old APK without the method must never break a download.
   }

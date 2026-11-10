@@ -3,6 +3,7 @@ import { haversineMeters } from '@running/core/geo';
 import type { BuildingPoly } from '@running/core/geo/los';
 import { fetchBuildings } from '@running/core/poi/buildings';
 import { fetchOsmPlaces, elementsToCandidates } from '@running/core/poi/osm';
+import { dedupeCandidates } from '@running/core/poi/pipeline';
 import {
   geosearch,
   pagesToCandidates,
@@ -48,7 +49,7 @@ function boundingCircle(lats: number[], lons: number[]): { lat: number; lon: num
 export async function fetchCandidates(
   lats: number[],
   lons: number[],
-  localLang: string,
+  langs: string[],
   onProgress: (text: string) => void,
 ): Promise<FetchReport> {
   // A downloaded area that covers the whole course serves its stored places.
@@ -77,7 +78,6 @@ export async function fetchCandidates(
   const buildingsPromise = fetchBuildings(lats, lons, BUILDINGS_CORRIDOR_M).catch(() => null);
 
   const centers = sampleCenters(lats, lons, CENTER_RADIUS_M);
-  const langs = localLang && localLang !== 'en' ? ['en', localLang] : ['en'];
   const jobs: { name: string; run: () => Promise<PlaceCandidate[]> }[] = [];
 
   for (const lang of langs) {
@@ -124,16 +124,15 @@ export async function fetchCandidates(
   return { candidates, buildings: buildings ?? [], failures: [...failed] };
 }
 
-/** Name search on English plus the local Wikipedia. */
+/** Name search across the given editions; results keep the langs order, deduped. */
 export async function searchPlacesByName(
   text: string,
-  localLang: string,
+  langs: string[],
 ): Promise<PlaceCandidate[]> {
-  const langs = localLang && localLang !== 'en' ? ['en', localLang] : ['en'];
   const results = await Promise.allSettled(
     langs.map(async (lang) => pagesToCandidates(lang, await searchByName(lang, text))),
   );
   const out: PlaceCandidate[] = [];
   for (const r of results) if (r.status === 'fulfilled') out.push(...r.value);
-  return out;
+  return dedupeCandidates(out);
 }

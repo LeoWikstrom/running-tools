@@ -21,6 +21,8 @@ public class DownloadService extends Service {
     static final String EXTRA_TEXT = "text";
     private static final String CHANNEL = "download";
     private static final int NOTIFICATION_ID = 3;
+    /** Separate id: the finished notice must survive stopForeground(REMOVE). */
+    private static final int FINISHED_ID = 4;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -30,13 +32,30 @@ public class DownloadService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        createChannel();
+        ensureChannel(this);
         startForeground(NOTIFICATION_ID, buildNotification(text));
         return START_NOT_STICKY;
     }
 
-    private void createChannel() {
-        NotificationManager nm = getSystemService(NotificationManager.class);
+    /** A dismissible "done" notice, posted directly — no service needed. */
+    static void postFinished(android.content.Context ctx, String text) {
+        ensureChannel(ctx);
+        Intent open = new Intent(ctx, MainActivity.class);
+        PendingIntent content = PendingIntent.getActivity(ctx, 0, open,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Notification n = new Notification.Builder(ctx, CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_run)
+                .setContentTitle("Area download finished")
+                .setContentText(text)
+                .setStyle(new Notification.BigTextStyle().bigText(text))
+                .setContentIntent(content)
+                .setAutoCancel(true)
+                .build();
+        ctx.getSystemService(NotificationManager.class).notify(FINISHED_ID, n);
+    }
+
+    private static void ensureChannel(android.content.Context ctx) {
+        NotificationManager nm = ctx.getSystemService(NotificationManager.class);
         nm.createNotificationChannel(
                 new NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW));
     }

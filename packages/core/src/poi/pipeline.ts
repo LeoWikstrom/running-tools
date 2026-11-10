@@ -148,6 +148,8 @@ function addWikipedia(target: PlaceCandidate, page?: { lang: string; title: stri
 
 function mergeInto(target: PlaceCandidate, extra: PlaceCandidate): void {
   target.wikidataId ??= extra.wikidataId;
+  // The target's own edition must survive the English-preference swap below.
+  addWikipedia(target, target.wikipedia);
   addWikipedia(target, extra.wikipedia);
   for (const w of extra.wikipedias ?? []) addWikipedia(target, w);
   // Prefer an English page for the default narration language.

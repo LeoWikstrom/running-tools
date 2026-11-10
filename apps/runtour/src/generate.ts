@@ -27,7 +27,8 @@ export interface GenerateParams {
   end: { lat: number; lon: number } | null;
   /** Null (needs a finish): the shortest course that still collects places. */
   targetLengthM: number | null;
-  localLang: string;
+  /** Wikipedia editions to fetch, narration language first (searchLangs). */
+  searchLangs: string[];
   /** 0..100 each: more places↔direct, pedestrian↔roads too, centre↔outskirts, twisty↔circular. */
   placesSlider: number;
   pedestrianSlider: number;
@@ -161,10 +162,9 @@ export interface AreaCandidates {
 export async function fetchAreaCandidates(
   center: { lat: number; lon: number },
   radiusM: number,
-  localLang: string,
+  langs: string[],
 ): Promise<AreaCandidates> {
   const r = Math.min(radiusM, GEOSEARCH_MAX_M);
-  const langs = localLang && localLang !== 'en' ? ['en', localLang] : ['en'];
   const centers = circleCenters(center, r, CHUNK_RADIUS_M);
   const chunkR = centers.length === 1 ? r : CHUNK_RADIUS_M;
 
@@ -227,7 +227,7 @@ async function placesAround(
   const candidates =
     stored && stored.length > 0
       ? stored.filter((c) => haversineMeters(center.lat, center.lon, c.lat, c.lon) <= radiusM)
-      : (await fetchAreaCandidates(center, radiusM, p.localLang)).candidates;
+      : (await fetchAreaCandidates(center, radiusM, p.searchLangs)).candidates;
   const out: TourSearchPlace[] = candidates
     .filter((c) => !isExcludedType(c))
     .filter((c) => !(p.excludeStreets && isStreetPlace(c)))

@@ -103,6 +103,7 @@ public class MainActivity extends Activity {
 
     private static final int REQ_RUN_PERMISSIONS = 11;
     private static final int REQ_GEO_PERMISSION = 12;
+    private static final int REQ_DOWNLOAD_PERMISSION = 13;
 
     /** Bound for the web run UI; the binding keeps the finished service's
         summary alive until the page has read it. */
@@ -328,6 +329,9 @@ public class MainActivity extends Activity {
             }
             return;
         }
+        // Download notifications: nothing pending — the next status update
+        // re-calls startForeground, so the ongoing notice appears by itself.
+        if (req == REQ_DOWNLOAD_PERMISSION) return;
         if (req != REQ_RUN_PERMISSIONS) return;
         String tourId = pendingRunTourId;
         pendingRunTourId = null;
@@ -337,6 +341,18 @@ public class MainActivity extends Activity {
             return;
         }
         if (tourId != null) beginRun(tourId);
+    }
+
+    /** Ask for POST_NOTIFICATIONS when a download begins, so its progress shows. */
+    private void askNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        runOnUiThread(() -> {
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[] { "android.permission.POST_NOTIFICATIONS" },
+                        REQ_DOWNLOAD_PERMISSION);
+            }
+        });
     }
 
     /** One line of why, then the system dialog; some phones kill plain services. */
@@ -399,10 +415,25 @@ public class MainActivity extends Activity {
                     .setAction(DownloadService.ACTION_STATUS)
                     .putExtra(DownloadService.EXTRA_TEXT, text == null ? "" : text);
             try {
-                if (text != null && !text.isEmpty()) startForegroundService(intent);
-                else startService(intent);
+                if (text != null && !text.isEmpty()) {
+                    askNotificationPermission();
+                    startForegroundService(intent);
+                } else {
+                    startService(intent);
+                }
             } catch (Exception ignored) {
                 // A refused service start must never break the download itself.
+            }
+        }
+
+        /** A dismissible "finished" notice once the ongoing one is taken down. */
+        @JavascriptInterface
+        public void downloadDone(String text) {
+            if (text == null || text.isEmpty()) return;
+            try {
+                DownloadService.postFinished(MainActivity.this, text);
+            } catch (Exception ignored) {
+                // Purely informational; never break the page over it.
             }
         }
 
