@@ -19,7 +19,10 @@ public class DownloadService extends Service {
 
     static final String ACTION_STATUS = "se.leo.racetwin.DOWNLOAD_STATUS";
     static final String EXTRA_TEXT = "text";
-    private static final String CHANNEL = "download";
+    // "download" (v1) was IMPORTANCE_LOW — silent section, no status-bar icon
+    // on many phones. A channel's importance is frozen at creation, so the
+    // visible replacement needs a new id.
+    private static final String CHANNEL = "downloads";
     private static final int NOTIFICATION_ID = 3;
     /** Separate id: the finished notice must survive stopForeground(REMOVE). */
     private static final int FINISHED_ID = 4;
@@ -56,8 +59,13 @@ public class DownloadService extends Service {
 
     private static void ensureChannel(android.content.Context ctx) {
         NotificationManager nm = ctx.getSystemService(NotificationManager.class);
-        nm.createNotificationChannel(
-                new NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW));
+        NotificationChannel ch =
+                new NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_DEFAULT);
+        // Visible in the status bar, but a progress tick must not ding or buzz.
+        ch.setSound(null, null);
+        ch.enableVibration(false);
+        nm.createNotificationChannel(ch);
+        nm.deleteNotificationChannel("download");
     }
 
     private Notification buildNotification(String text) {
