@@ -2,6 +2,7 @@ import { buildTargetProfile, SAMPLE_STEP_M, sliceProfile, type TargetProfile } f
 import { parseGpx, type ParsedGpx } from '@running/core/gpx/parse';
 import { SURFACE_PRESETS } from '@running/core/search/score';
 import { haversineMeters } from '@running/core/geo';
+import { downloadDoneNotice, downloadNotice } from './native';
 import { loadSession, requestPersistentStorage, saveSession } from './session';
 import type {
   AreaInfo,
@@ -1403,6 +1404,8 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
       if (downloadingArea || areaPromptDownload) {
         downloadingArea = false;
         toast('Area saved — searches here now run offline.');
+        downloadNotice('');
+        downloadDoneNotice('Area saved — searches here now run offline.');
       }
       downloadAreaButton.textContent = 'Download area around start';
       downloadAreaButton.disabled = map.getStart() === null;
@@ -1420,11 +1423,13 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
       renderTraces(msg.traces);
       // Downloading them is asking for them: the checkbox is only unticked by
       // default because there is nothing to use until one has been done.
+      if (downloadingTraces) downloadNotice('');
       if (downloadingTraces && msg.traces.length > 0) {
         useTraces.checked = true;
         reflectUseTraces();
         persistSession();
         toast('GPS traces saved — the unrun-ground weight can use them now.');
+        downloadDoneNotice('GPS traces saved — the unrun-ground weight can use them now.');
       }
       tracesDone();
       break;
@@ -1448,6 +1453,7 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
         downloadTracesButton.textContent = msg.stage;
         areaProgress.hidden = false;
         areaProgress.value = msg.fraction;
+        downloadNotice(msg.stage);
         break;
       }
       if (msg.stage.startsWith('downloading area')) {
@@ -1455,6 +1461,7 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
         areaProgress.hidden = false;
         areaProgress.value = msg.fraction;
         if (areaPromptDownload) areaPromptDownload.progress.value = msg.fraction;
+        downloadNotice(msg.stage);
         break;
       }
       // The hint rather than the button: sharing a row with the GPX chooser
@@ -1561,8 +1568,13 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
       toast(msg.message);
       searchDone();
       break;
-    case 'error':
+    case 'error': {
       console.warn('worker:', msg.message);
+      const wasDownloading = downloadingArea || areaPromptDownload !== null || downloadingTraces;
+      if (wasDownloading) {
+        downloadNotice('');
+        downloadDoneNotice(`Download failed: ${msg.message}`);
+      }
       // A failed area download must not leave the prompt modal stuck on a
       // disabled "Downloading…" button — Overpass failures are common.
       if (areaPromptDownload) {
@@ -1602,6 +1614,7 @@ worker.onmessage = (event: MessageEvent<WorkerToMain>) => {
       searchDone();
       tracesDone();
       break;
+    }
   }
 };
 send({ type: 'ping' });
@@ -1615,6 +1628,7 @@ downloadAreaButton.addEventListener('click', () => {
   downloadAreaButton.textContent = 'Downloading…';
   downloadingArea = true;
   toast('Downloading the area… this can take a while.');
+  downloadNotice('Downloading the area…');
   send({ type: 'downloadArea', center: start, radiusMeters: Number(areaRadius.value) * 1000 });
 });
 
@@ -1623,6 +1637,7 @@ function startTracesDownload(): void {
   if (!start) return;
   downloadingTraces = true;
   toast('Downloading GPS traces… this can take minutes; Cancel stops it.');
+  downloadNotice('Downloading GPS traces…');
   downloadTracesButton.disabled = true;
   downloadTracesButton.textContent = 'GPS traces: 0 %';
   // The search's Cancel stops this too — it is the same worker-side flag, and
@@ -2143,6 +2158,7 @@ function promptAreaDownload(startKey: string): void {
     areaRadius.value = select.value;
     downloadAreaButton.disabled = true;
     downloadAreaButton.textContent = 'Downloading…';
+    downloadNotice('Downloading the area…');
     send({ type: 'downloadArea', center: start, radiusMeters: Number(select.value) * 1000 });
     areaPromptDownload = {
       progress,

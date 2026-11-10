@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.GeolocationPermissions;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -37,6 +38,7 @@ public class MainActivity extends Activity {
 
     private static final int REQ_GEO_PERMISSION = 12;
     private static final int REQ_FILE_CHOOSER = 13;
+    private static final int REQ_DOWNLOAD_PERMISSION = 14;
 
     private WebView web;
     private String pendingGeoOrigin;
@@ -141,8 +143,58 @@ public class MainActivity extends Activity {
                 return true;
             }
         });
+        web.addJavascriptInterface(new Bridge(), "RaceTwin");
         setContentView(web);
         web.loadUrl(BASE);
+    }
+
+    /** The subset of the tour apps' bridge RaceTwin needs: download notices. */
+    private class Bridge {
+
+        /**
+         * Area/trace-download notification: non-empty text starts/updates the
+         * dataSync foreground service that keeps a minimised app downloading;
+         * empty text takes it down.
+         */
+        @JavascriptInterface
+        public void downloadStatus(String text) {
+            Intent intent = new Intent(MainActivity.this, DownloadService.class)
+                    .setAction(DownloadService.ACTION_STATUS)
+                    .putExtra(DownloadService.EXTRA_TEXT, text == null ? "" : text);
+            try {
+                if (text != null && !text.isEmpty()) {
+                    askNotificationPermission();
+                    startForegroundService(intent);
+                } else {
+                    startService(intent);
+                }
+            } catch (Exception ignored) {
+                // A refused service start must never break the download itself.
+            }
+        }
+
+        /** A dismissible "finished" notice once the ongoing one is taken down. */
+        @JavascriptInterface
+        public void downloadDone(String text) {
+            if (text == null || text.isEmpty()) return;
+            try {
+                DownloadService.postFinished(MainActivity.this, text);
+            } catch (Exception ignored) {
+                // Purely informational; never break the page over it.
+            }
+        }
+    }
+
+    /** Ask for POST_NOTIFICATIONS when a download begins, so its progress shows. */
+    private void askNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        runOnUiThread(() -> {
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[] { "android.permission.POST_NOTIFICATIONS" },
+                        REQ_DOWNLOAD_PERMISSION);
+            }
+        });
     }
 
     @Override
