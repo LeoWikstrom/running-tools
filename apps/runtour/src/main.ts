@@ -4,7 +4,13 @@ import { parseGpx, type GpxPoint } from '@running/core/gpx/parse';
 import { haversineMeters } from '@running/core/geo';
 import { findPointSpurs } from '@running/core/geo/spurs';
 import { searchLangs } from '@running/core/poi/langs';
-import { buildPlaces, firstPassProjection } from '@running/core/poi/pipeline';
+import {
+  buildPlaces,
+  candidateId,
+  dedupeCandidates,
+  firstPassProjection,
+  type PlaceStats,
+} from '@running/core/poi/pipeline';
 import { interestScore } from '@running/core/poi/score';
 import type { Place, PlaceCandidate } from '@running/core/poi/types';
 import { countWords, WORDS_PER_SECOND } from '@running/core/text/trim';
@@ -34,6 +40,7 @@ import {
   generateCourse,
   generationCircle,
   refineCourse,
+  rerouteThrough,
   regenerateCourse,
   type GenerationContext,
 } from './generate';
@@ -132,6 +139,8 @@ const texts = new Map<string, PlaceText>();
 const images = new Map<string, TourPlaceImage>();
 let busUi: BusLinesHandle | null = null;
 const markerLayer = L.layerGroup().addTo(map);
+/** Grey markers for fetched-but-not-shown candidates (settings toggles). */
+const candidateLayer = L.layerGroup().addTo(map);
 /** Which place editors are open, so render() keeps them open. */
 const openEditors = new Set<string>();
 
@@ -475,6 +484,128 @@ function markerFor(p: Place, kind: 'place' | 'manual' | 'via'): L.CircleMarker {
   return marker;
 }
 
+// --- Candidate layer: every fetched place the filters left out, on demand.
+
+const CANDIDATE_COLOR = '#777777';
+const showCandidatesCorridorBox = el<HTMLInputElement>('show-candidates-corridor');
+const showCandidatesAllBox = el<HTMLInputElement>('show-candidates-all');
+
+function candidateMarker(c: PlaceCandidate, inCorridor: boolean): L.CircleMarker {
+  const score = interestScore(c);
+  const marker = L.circleMarker([c.lat, c.lon], {
+    radius: 4 + (score / 100) * 3,
+    color: CANDIDATE_COLOR,
+    fillOpacity: 0.25,
+    weight: 1.5,
+    dashArray: '3 3',
+  });
+  marker.bindTooltip(`${c.name} (${score})`);
+  const box = document.createElement('div');
+  const title = document.createElement('strong');
+  title.textContent = c.name;
+  box.append(title, document.createElement('br'), `candidate · score ${score}`, document.createElement('br'));
+  c.sources.forEach((s, i) => {
+    if (i > 0) box.append(' · ');
+    box.append(safeLink(s.url, s.kind));
+  });
+  box.append(document.createElement('br'));
+  const include = document.createElement('button');
+  include.textContent = inCorridor
+    ? 'Include'
+    : genContext
+      ? 'Include (reroute the course)'
+      : 'Include (beyond the corridor)';
+  include.addEventListener('click', () => {
+    marker.closePopup();
+    includeCandidate(c, inCorridor);
+  });
+  box.appendChild(include);
+  marker.bindPopup(box);
+  return marker;
+}
+
+function renderCandidates(): void {
+  candidateLayer.clearLayers();
+  if (!course || candidates.length === 0) return;
+  const showAll = showCandidatesAllBox.checked;
+  const showCorridor = showCandidatesCorridorBox.checked;
+  if (!showAll && !showCorridor) return;
+  const shown = new Set(allPlaces().map((p) => p.id));
+  for (const c of dedupeCandidates(candidates)) {
+    if (
+      shown.has(candidateId(c)) ||
+      (c.wikidataId && shown.has(c.wikidataId)) ||
+      shown.has(`manual:${c.name.toLowerCase()}`)
+    ) {
+      continue;
+    }
+    const pass = firstPassProjection(
+      course.lats,
+      course.lons,
+      c.lat,
+      c.lon,
+      VARIANT_DEFAULTS.corridorWidth,
+    );
+    if (!showAll && !pass) continue;
+    candidateMarker(c, pass !== null).addTo(candidateLayer);
+  }
+}
+
+/** Include a candidate the filters (or the course's shape) left out. On the
+    course it is pinned like a hand-added place; beyond the corridor a
+    generated course is rerouted through it — required places stay required,
+    so a reroute that would lose one fails with the course untouched. */
+function includeCandidate(c: PlaceCandidate, inCorridor: boolean): void {
+  if (!course) return;
+  removedIds.delete(candidateId(c));
+  if (c.wikidataId) removedIds.delete(c.wikidataId);
+  if (inCorridor || !genContext) {
+    // addManualPlace accepts up to 1 km out; beyond that it says so itself.
+    addManualPlace(c);
+    return;
+  }
+  if (refining) return;
+  refining = true;
+  setStatus(`Rerouting the course through ${c.name}…`);
+  toast('Rerouting…');
+  void (async () => {
+    try {
+      const keep = places.map((p) => ({
+        id: p.id,
+        name: p.name,
+        lat: p.lat,
+        lon: p.lon,
+        score: p.score,
+      }));
+      const target = {
+        id: c.wikidataId ?? `name:${c.name.toLowerCase()}`,
+        name: c.name,
+        lat: c.lat,
+        lon: c.lon,
+        score: Math.max(interestScore(c), 30),
+      };
+      const result = await rerouteThrough(genContext!, target, keep, (text, fraction) =>
+        setGenStatus(`${text} ${(fraction * 100).toFixed(0)} %`),
+      );
+      setGenStatus('');
+      genContext = result.context ?? genContext;
+      updateCourseGeometry(result.points);
+      // Pin it: now on the course, and the interest/spacing filters must not
+      // hide the very place the user just asked for.
+      addManualPlace(c);
+      setStatus(`Course rerouted through ${c.name} — now ${(result.lengthM / 1000).toFixed(2)} km.`);
+      toast(`Course rerouted — now ${(result.lengthM / 1000).toFixed(2)} km.`);
+    } catch (err) {
+      setGenStatus('');
+      const message = err instanceof Error ? err.message : String(err);
+      setStatus(`Could not reroute through ${c.name}: ${message}`);
+      toast('Reroute failed — course unchanged.');
+    } finally {
+      refining = false;
+    }
+  })();
+}
+
 function textBadge(p: Place): string {
   const t = texts.get(p.id);
   if (!t || t.text.length === 0) return '✎ no text';
@@ -634,6 +765,8 @@ function render(): void {
     });
     placeList.appendChild(li);
   }
+  renderCandidates();
+
   const any = list.length > 0;
   markersBtn.hidden = !any && candidates.length === 0;
   textControls.hidden = !any;
@@ -645,10 +778,14 @@ function render(): void {
   saveSession(course ? buildTour() : null);
 }
 
+/** The last buildPlaces funnel, for the status line and the candidate layer. */
+let placeStats: PlaceStats | null = null;
+
 function recompute(): void {
   if (!course) return;
   if (candidates.length > 0) {
     const pool = nativeOnly() ? candidates.filter(hasNarrationPage) : candidates;
+    const stats: PlaceStats = { candidates: 0, inCorridor: 0, shown: 0 };
     places = buildPlaces(
       course.lats,
       course.lons,
@@ -663,12 +800,23 @@ function recompute(): void {
       },
       removedIds,
       buildings,
+      stats,
     );
+    placeStats = stats;
   } else {
     places = places.filter((p) => !removedIds.has(p.id));
+    placeStats = null;
   }
   render();
-  if (allPlaces().length > 0) setStatus(`${allPlaces().length} places along the course.`);
+  if (placeStats) {
+    setStatus(
+      `${allPlaces().length} places along the course — of ${placeStats.candidates} candidates, ` +
+        `${placeStats.inCorridor} lie within ${VARIANT_DEFAULTS.corridorWidth} m, ` +
+        `${placeStats.shown} passed the interest, sightline and spacing filters.`,
+    );
+  } else if (allPlaces().length > 0) {
+    setStatus(`${allPlaces().length} places along the course.`);
+  }
 }
 
 /** Swap every fetched text to the new narration language in one go; places
@@ -862,6 +1010,18 @@ for (const [box, key] of [
   box.addEventListener('change', () => {
     localStorage.setItem(key, box.checked ? '1' : '0');
     if (candidates.length > 0) recompute();
+  });
+}
+
+showCandidatesCorridorBox.checked = localStorage.getItem('runtour.showCandidatesCorridor') === '1';
+showCandidatesAllBox.checked = localStorage.getItem('runtour.showCandidatesAll') === '1';
+for (const [box, key] of [
+  [showCandidatesCorridorBox, 'runtour.showCandidatesCorridor'],
+  [showCandidatesAllBox, 'runtour.showCandidatesAll'],
+] as const) {
+  box.addEventListener('change', () => {
+    localStorage.setItem(key, box.checked ? '1' : '0');
+    renderCandidates();
   });
 }
 

@@ -1,4 +1,10 @@
-import { RUNNABLE_HIGHWAYS, type OverpassNode, type OverpassWay } from './overpass';
+import {
+  isForbiddenZoneTags,
+  RUNNABLE_HIGHWAYS,
+  type OverpassNode,
+  type OverpassRelation,
+  type OverpassWay,
+} from './overpass';
 import { TILE_LAT_STEP, TILE_LON_STEP } from './networkTiles';
 
 /**
@@ -28,12 +34,18 @@ function parseTags(field: string): Record<string, string> {
 
 export type OplElement =
   | { type: 'node'; id: number; lat: number; lon: number; tags?: Record<string, string> }
-  | { type: 'way'; id: number; nodes: number[]; tags: Record<string, string> };
+  | { type: 'way'; id: number; nodes: number[]; tags: Record<string, string> }
+  | {
+      type: 'relation';
+      id: number;
+      members: { type: string; ref: number; role: string }[];
+      tags: Record<string, string>;
+    };
 
-/** One OPL line → element; null for relations, malformed or non-object lines. */
+/** One OPL line → element; null for malformed or non-object lines. */
 export function parseOplLine(line: string): OplElement | null {
   const kind = line[0];
-  if (kind !== 'n' && kind !== 'w') return null;
+  if (kind !== 'n' && kind !== 'w' && kind !== 'r') return null;
   const fields = line.split(' ');
   const id = Number(fields[0]!.slice(1));
   if (!Number.isFinite(id)) return null;
@@ -41,6 +53,7 @@ export function parseOplLine(line: string): OplElement | null {
   let lat = NaN;
   let lon = NaN;
   let nodes: number[] = [];
+  let members: { type: string; ref: number; role: string }[] = [];
   for (let i = 1; i < fields.length; i++) {
     const f = fields[i]!;
     const prefix = f[0];
@@ -53,6 +66,18 @@ export function parseOplLine(line: string): OplElement | null {
         .split(',')
         .map((r) => Number(r.slice(1)))
         .filter((n) => Number.isFinite(n));
+    } else if (prefix === 'M' && f.length > 1) {
+      members = f
+        .slice(1)
+        .split(',')
+        .map((m) => {
+          const at = m.indexOf('@');
+          const typeChar = m[0]!;
+          const ref = Number(m.slice(1, at < 0 ? undefined : at));
+          const type = typeChar === 'w' ? 'way' : typeChar === 'n' ? 'node' : 'relation';
+          return { type, ref, role: at < 0 ? '' : decodeOpl(m.slice(at + 1)) };
+        })
+        .filter((m) => Number.isFinite(m.ref));
     }
   }
   if (kind === 'n') {
@@ -60,6 +85,10 @@ export function parseOplLine(line: string): OplElement | null {
     const node: OplElement = { type: 'node', id, lat, lon };
     if (Object.keys(tags).length > 0) node.tags = tags;
     return node;
+  }
+  if (kind === 'r') {
+    if (members.length === 0) return null;
+    return { type: 'relation', id, members, tags };
   }
   if (nodes.length < 2) return null;
   return { type: 'way', id, nodes, tags };
@@ -85,7 +114,14 @@ export function keepWay(tags: Record<string, string>): boolean {
   if (tags.barrier !== undefined) return true;
   if (tags.railway !== undefined && RAILWAY_RE.test(tags.railway)) return true;
   if (tags.waterway !== undefined && WATERWAY_RE.test(tags.waterway)) return true;
+  if (isForbiddenZoneTags(tags)) return true;
   return false;
+}
+
+export function toOverpassRelation(
+  el: Extract<OplElement, { type: 'relation' }>,
+): OverpassRelation {
+  return { type: 'relation', id: el.id, members: el.members, tags: el.tags };
 }
 
 /** Every tile any of the points falls in — a boundary ring is duplicated

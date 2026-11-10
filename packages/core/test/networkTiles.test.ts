@@ -112,6 +112,20 @@ describe('OPL parsing', () => {
     });
     expect(parseOplLine('r77 v1 Ttype=route')).toBeNull();
   });
+
+  it('parses relations with members', () => {
+    const r = parseOplLine('r77 v1 Tlanduse=military,name=Lv6 Mw11@outer,w12@inner,n5@');
+    expect(r).toEqual({
+      type: 'relation',
+      id: 77,
+      members: [
+        { type: 'way', ref: 11, role: 'outer' },
+        { type: 'way', ref: 12, role: 'inner' },
+        { type: 'node', ref: 5, role: '' },
+      ],
+      tags: { landuse: 'military', name: 'Lv6' },
+    });
+  });
 });
 
 describe('keepWay — buildQuery clause parity', () => {
@@ -132,6 +146,9 @@ describe('keepWay — buildQuery clause parity', () => {
     // The union: a private footway that is also a barrier stays (Overpass
     // would return it through the barrier clause).
     [{ highway: 'footway', access: 'private', barrier: 'gate' }, true],
+    // Forbidden zones ride in the tiles so buildGraph can fence them off.
+    [{ landuse: 'military' }, true],
+    [{ landuse: 'meadow' }, false],
     [{}, false],
   ])('%o → %s', (tags, expected) => {
     expect(keepWay(tags as Record<string, string>)).toBe(expected);

@@ -3,6 +3,7 @@ import { SAMPLE_STEP_M } from '../gpx/profile';
 import type { OverpassResponse, OverpassWay } from '../net/overpass';
 import type { TerrainSampler } from '../net/terrain';
 import { cellIdAt } from './cells';
+import { collectForbiddenZones, pointInForbiddenZone } from './forbiddenZones';
 import {
   otherNode,
   SURFACE_GRAVEL,
@@ -346,6 +347,7 @@ function segmentsIntersect(
 }
 
 export function buildGraph(response: OverpassResponse, opts: { connectors?: boolean } = {}): Graph {
+  const forbidden = collectForbiddenZones(response.elements);
   const nodeCoord = new Map<number, { lat: number; lon: number }>();
   const signalNodes = new Set<number>();
   const ways: OverpassWay[] = [];
@@ -428,6 +430,13 @@ export function buildGraph(response: OverpassResponse, opts: { connectors?: bool
         }
       }
       if (lengthM < 1) continue;
+      // Closed areas (military terrain): an edge whose midpoint lies inside
+      // is unrunnable however its own tags read. Per edge, not per way, so a
+      // street that merely touches the boundary keeps its outside part.
+      if (forbidden.length > 0) {
+        const mid = coords[Math.floor(coords.length / 2)]!;
+        if (pointInForbiddenZone(forbidden, mid.lat, mid.lon)) continue;
+      }
       const last = lats.length - 1;
       const bridge = tags['bridge'];
       const isBridge = !!bridge && bridge !== 'no';

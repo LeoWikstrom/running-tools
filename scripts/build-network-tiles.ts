@@ -3,13 +3,14 @@
  * exact OverpassResponse shape buildGraph consumes. Run in CI by
  * .github/workflows/network-tiles.yml as:
  *
- *   npx tsx scripts/build-network-tiles.ts <nodes.opl> <ways.opl> <outDir>
+ *   npx tsx scripts/build-network-tiles.ts <nodes.opl> <ways.opl> <outDir> [relations.opl]
  *
  * where the OPL files come from the Geofabrik extract via
  *   osmium tags-filter sweden-latest.osm.pbf w/highway w/barrier w/railway
- *     w/waterway -o filtered.pbf
+ *     w/waterway w/landuse=military r/landuse=military -o filtered.pbf
  *   osmium cat --object-type n -f opl filtered.pbf -o nodes.opl
  *   osmium cat --object-type w -f opl filtered.pbf -o ways.opl
+ *   osmium cat --object-type r -f opl filtered.pbf -o relations.opl
  *
  * (tags-filter is deliberately broad; keepWay applies buildQuery's precise
  * clause logic, filters osmium cannot express included.) Two passes because
@@ -24,15 +25,21 @@ import { createInterface } from 'node:readline';
 import {
   keepWay,
   parseOplLine,
+  toOverpassRelation,
   toOverpassWay,
   wayTiles,
 } from '../packages/core/src/net/networkTilesBuild';
 import { TILE_LAT_STEP, TILE_LON_STEP } from '../packages/core/src/net/networkTiles';
-import type { OverpassNode, OverpassWay } from '../packages/core/src/net/overpass';
+import { isForbiddenZoneTags } from '../packages/core/src/net/overpass';
+import type {
+  OverpassNode,
+  OverpassRelation,
+  OverpassWay,
+} from '../packages/core/src/net/overpass';
 
-const [nodesPath, waysPath, outDir] = process.argv.slice(2);
+const [nodesPath, waysPath, outDir, relationsPath] = process.argv.slice(2);
 if (!nodesPath || !waysPath || !outDir) {
-  console.error('usage: build-network-tiles.ts <nodes.opl> <ways.opl> <outDir>');
+  console.error('usage: build-network-tiles.ts <nodes.opl> <ways.opl> <outDir> [relations.opl]');
   process.exit(1);
 }
 
@@ -75,23 +82,66 @@ const nodePos = (id: number): { lat: number; lon: number } | undefined => {
   return i === undefined ? undefined : { lat: lats[i]!, lon: lons[i]! };
 };
 
+// Pass 1b — forbidden-zone relations (landuse=military multipolygons): kept
+// whole, so a tile at the area's edge still assembles a closed ring.
+const zoneRelations: OverpassRelation[] = [];
+const zoneMemberWayIds = new Set<number>();
+if (relationsPath) {
+  await eachLine(relationsPath, (line) => {
+    const el = parseOplLine(line);
+    if (!el || el.type !== 'relation' || !isForbiddenZoneTags(el.tags)) return;
+    zoneRelations.push(toOverpassRelation(el));
+    for (const m of el.members) if (m.type === 'way') zoneMemberWayIds.add(m.ref);
+  });
+  console.log(`${zoneRelations.length} forbidden-zone relations read`);
+}
+
 // Pass 2 — ways into per-tile buckets (way list + referenced node ids).
-const tiles = new Map<string, { ways: OverpassWay[]; nodeIds: Set<number> }>();
+const tiles = new Map<
+  string,
+  { ways: OverpassWay[]; relations: OverpassRelation[]; nodeIds: Set<number> }
+>();
+const tileAt = (id: string): NonNullable<ReturnType<typeof tiles.get>> => {
+  let tile = tiles.get(id);
+  if (!tile) tiles.set(id, (tile = { ways: [], relations: [], nodeIds: new Set() }));
+  return tile;
+};
+const zoneMemberWays = new Map<number, OverpassWay>();
 let keptWays = 0;
 
 await eachLine(waysPath, (line) => {
   const el = parseOplLine(line);
-  if (!el || el.type !== 'way' || !keepWay(el.tags)) return;
+  if (!el || el.type !== 'way') return;
+  if (zoneMemberWayIds.has(el.id)) zoneMemberWays.set(el.id, toOverpassWay(el));
+  if (!keepWay(el.tags)) return;
   keptWays++;
   const way = toOverpassWay(el);
   for (const id of wayTiles(el.nodes, nodePos)) {
-    let tile = tiles.get(id);
-    if (!tile) tiles.set(id, (tile = { ways: [], nodeIds: new Set() }));
+    const tile = tileAt(id);
     tile.ways.push(way);
     for (const n of el.nodes) tile.nodeIds.add(n);
   }
 });
 console.log(`${keptWays} ways kept across ${tiles.size} tiles`);
+
+// Each forbidden-zone relation goes whole — relation, member ways, their
+// nodes — into every tile any member touches; the client dedupes by id.
+for (const rel of zoneRelations) {
+  const members = rel.members
+    .map((m) => (m.type === 'way' ? zoneMemberWays.get(m.ref) : undefined))
+    .filter((w): w is OverpassWay => w !== undefined);
+  if (members.length === 0) continue;
+  const touched = new Set<string>();
+  for (const w of members) for (const t of wayTiles(w.nodes, nodePos)) touched.add(t);
+  for (const t of touched) {
+    const tile = tileAt(t);
+    tile.relations.push(rel);
+    for (const w of members) {
+      tile.ways.push(w);
+      for (const n of w.nodes) tile.nodeIds.add(n);
+    }
+  }
+}
 
 await mkdir(outDir, { recursive: true });
 let totalBytes = 0;
@@ -105,7 +155,7 @@ for (const [id, tile] of tiles) {
     if (tags) node.tags = tags;
     nodes.push(node);
   }
-  const body = JSON.stringify({ elements: [...tile.ways, ...nodes] });
+  const body = JSON.stringify({ elements: [...tile.ways, ...tile.relations, ...nodes] });
   totalBytes += body.length;
   await writeFile(join(outDir, `net_${id}.json`), body);
 }

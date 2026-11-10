@@ -411,6 +411,40 @@ export async function refineCourse(
   );
 }
 
+/**
+ * Reroute through one more required place. Every place in `keep` is marked
+ * required too, so the fresh search may reshape the course between them but
+ * cannot drop any of them — failing instead, with the course untouched.
+ */
+export async function rerouteThrough(
+  context: GenerationContext,
+  add: TourSearchPlace,
+  keep: TourSearchPlace[],
+  onProgress: (text: string, fraction: number) => void,
+): Promise<GeneratedCourse> {
+  const places = context.places.map((p) => ({ ...p }));
+  const require = (q: TourSearchPlace): void => {
+    const near = places.find(
+      (c) => c.id === q.id || haversineMeters(c.lat, c.lon, q.lat, q.lon) < 60,
+    );
+    if (near) near.required = true;
+    else places.push({ ...q, required: true });
+  };
+  for (const k of keep) require(k);
+  require(add);
+  const request = {
+    response: context.response,
+    start: context.start,
+    end: context.end,
+    places,
+    targetLengthM: context.targetLengthM,
+    weights: context.weights,
+    outerSpurBudgetFrac: context.outerSpurBudgetFrac,
+  };
+  const result = await runWorker(request, () => {}, onProgress);
+  return { ...result, context: { ...request, edges: result.edges } };
+}
+
 /** Full re-search on the stored network — for when local improvement cannot
     restructure the course after a removal. */
 export async function regenerateCourse(

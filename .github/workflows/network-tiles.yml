@@ -44,14 +44,17 @@ jobs:
             w/barrier \
             w/railway=rail,tram,light_rail \
             w/waterway=river,stream,canal,ditch \
+            w/landuse=military \
+            r/landuse=military \
             -o filtered.pbf
           osmium cat --object-type n -f opl filtered.pbf -o nodes.opl
           osmium cat --object-type w -f opl filtered.pbf -o ways.opl
-          ls -l filtered.pbf nodes.opl ways.opl
+          osmium cat --object-type r -f opl filtered.pbf -o relations.opl
+          ls -l filtered.pbf nodes.opl ways.opl relations.opl
       - name: Build tiles
         env:
           NODE_OPTIONS: --max-old-space-size=12288
-        run: npx tsx scripts/build-network-tiles.ts nodes.opl ways.opl tiles
+        run: npx tsx scripts/build-network-tiles.ts nodes.opl ways.opl tiles relations.opl
       - name: Build building tiles
         # Footprints ride beside the network tiles on the same branch:
         # polyline-encoded rings, no tags, no node joining (osmium export

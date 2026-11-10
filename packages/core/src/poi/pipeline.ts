@@ -168,6 +168,16 @@ function mergeInto(target: PlaceCandidate, extra: PlaceCandidate): void {
   }
 }
 
+/** The id a candidate gets as a Place. The fallback carries rounded
+    coordinates: two distant places sharing a name must not collide (an
+    exclude would remove both). */
+export function candidateId(c: PlaceCandidate): string {
+  return (
+    c.wikidataId ??
+    `${c.sources[0]?.kind ?? 'place'}:${normalizeName(c.name)}:${c.lat.toFixed(3)},${c.lon.toFixed(3)}`
+  );
+}
+
 /** Merge candidates by Wikidata id when present, else by normalised name within 50 m. */
 export function dedupeCandidates(candidates: PlaceCandidate[]): PlaceCandidate[] {
   const byWikidata = new Map<string, PlaceCandidate>();
@@ -218,6 +228,16 @@ export function dedupeCandidates(candidates: PlaceCandidate[]): PlaceCandidate[]
  * with first-pass projection, score, thin to minSpacing, cap, trigger points.
  * Returns places ordered by distance along the course.
  */
+/** Where candidates go between fetch and the shown list, for the status line. */
+export interface PlaceStats {
+  /** Distinct candidates after dedup (and any caller-side language filter). */
+  candidates: number;
+  /** Of those, within corridorWidth of the course. */
+  inCorridor: number;
+  /** Survivors of interest, line-of-sight, spacing and the cap. */
+  shown: number;
+}
+
 export function buildPlaces(
   lats: ArrayLike<number>,
   lons: ArrayLike<number>,
@@ -227,9 +247,17 @@ export function buildPlaces(
   excludeIds?: ReadonlySet<string>,
   /** Building footprints for line-of-sight filtering; absent, nothing is hidden. */
   buildings?: BuildingPoly[],
+  /** Filled with the funnel counts when given. */
+  stats?: PlaceStats,
 ): Place[] {
   const s: PoiSettings = { ...DEFAULT_POI_SETTINGS, ...settings };
-  const merged = dedupeCandidates(candidates).filter(
+  const deduped = dedupeCandidates(candidates);
+  if (stats) {
+    stats.candidates = deduped.length;
+    stats.inCorridor = 0;
+    stats.shown = 0;
+  }
+  const merged = deduped.filter(
     (c) =>
       hasSignal(c) &&
       !isExcludedType(c) &&
@@ -237,6 +265,14 @@ export function buildPlaces(
       !(s.excludeSquares && isSquarePlace(c)) &&
       !(s.excludeEvents && isEventPlace(c)),
   );
+
+  // Pure geometry, before any interest/type filter: the status line's
+  // "within the corridor" number must answer "was it near the course at all?".
+  if (stats) {
+    for (const c of deduped) {
+      if (firstPassProjection(lats, lons, c.lat, c.lon, s.corridorWidth)) stats.inCorridor++;
+    }
+  }
 
   // Line of sight: a place stays if enough of the window around its first
   // pass can see it — a corner building must not drop a place in plain view
@@ -269,11 +305,7 @@ export function buildPlaces(
     if (!pass) continue;
     const score = interestScore(c);
     if (score <= 0) continue;
-    // The fallback id carries rounded coordinates: two distant places sharing
-    // a name must not collide (an exclude would remove both).
-    const id =
-      c.wikidataId ??
-      `${c.sources[0]?.kind ?? 'place'}:${normalizeName(c.name)}:${c.lat.toFixed(3)},${c.lon.toFixed(3)}`;
+    const id = candidateId(c);
     if (excludeIds?.has(id)) continue;
     if (!visible(c, pass.along)) continue;
     placed.push({
@@ -306,11 +338,13 @@ export function buildPlaces(
   }
 
   // Cap: drop the lowest scores, keeping course order.
+  let result = thinned;
   if (thinned.length > s.maxPlaces) {
     const keep = new Set(
       [...thinned].sort((a, b) => b.score - a.score).slice(0, s.maxPlaces),
     );
-    return thinned.filter((p) => keep.has(p));
+    result = thinned.filter((p) => keep.has(p));
   }
-  return thinned;
+  if (stats) stats.shown = result.length;
+  return result;
 }

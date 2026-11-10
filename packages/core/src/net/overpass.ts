@@ -22,8 +22,26 @@ export interface OverpassWay {
   tags?: Record<string, string>;
 }
 
+/** Only fetched for forbidden zones (landuse=military multipolygons). */
+export interface OverpassRelation {
+  type: 'relation';
+  id: number;
+  members: { type: string; ref: number; role: string }[];
+  tags?: Record<string, string>;
+}
+
+export type OverpassElement = OverpassNode | OverpassWay | OverpassRelation;
+
 export interface OverpassResponse {
-  elements: (OverpassNode | OverpassWay)[];
+  elements: OverpassElement[];
+}
+
+/** Ways and relations whose area must not be routed through (closed military
+    terrain: the area carries the restriction, its internal roads rarely do). */
+export const FORBIDDEN_LANDUSE = 'military';
+
+export function isForbiddenZoneTags(tags: Record<string, string> | undefined): boolean {
+  return tags?.['landuse'] === FORBIDDEN_LANDUSE;
 }
 
 const ENDPOINTS = [
@@ -50,6 +68,8 @@ export function buildQuery(center: LatLon, radiusMeters: number): string {
     `way[barrier]${around};` +
     `way[railway~"^(rail|tram|light_rail)$"]${around};` +
     `way[waterway~"^(river|stream|canal|ditch)$"]${around};` +
+    `way[landuse=${FORBIDDEN_LANDUSE}]${around};` +
+    `relation[landuse=${FORBIDDEN_LANDUSE}]${around};` +
     `);out body;>;out body qt;`
   );
 }
@@ -71,6 +91,8 @@ export function buildQueryBBox(bbox: QueryBBox): string {
     `way[barrier]${b};` +
     `way[railway~"^(rail|tram|light_rail)$"]${b};` +
     `way[waterway~"^(river|stream|canal|ditch)$"]${b};` +
+    `way[landuse=${FORBIDDEN_LANDUSE}]${b};` +
+    `relation[landuse=${FORBIDDEN_LANDUSE}]${b};` +
     `);out body;>;out body qt;`
   );
 }
@@ -93,7 +115,7 @@ export function quadrantBoxes(center: LatLon, radiusMeters: number): QueryBBox[]
     so dropping the second copy loses nothing. */
 export function mergeOverpassResponses(responses: readonly OverpassResponse[]): OverpassResponse {
   const seen = new Set<string>();
-  const elements: (OverpassNode | OverpassWay)[] = [];
+  const elements: OverpassElement[] = [];
   for (const r of responses) {
     for (const el of r.elements) {
       const key = `${el.type}:${el.id}`;
@@ -106,7 +128,8 @@ export function mergeOverpassResponses(responses: readonly OverpassResponse[]): 
 }
 
 function cacheKey(center: LatLon, radiusMeters: number): string {
-  return `overpass:v4:${center.lat.toFixed(3)},${center.lon.toFixed(3)},${Math.round(radiusMeters / 100)}`;
+  // v5: v4 responses predate the forbidden-zone (military) elements.
+  return `overpass:v5:${center.lat.toFixed(3)},${center.lon.toFixed(3)},${Math.round(radiusMeters / 100)}`;
 }
 
 export interface FetchNetworkOptions {
@@ -169,18 +192,29 @@ export function filterByRadius(
     return haversineMeters(center.lat, center.lon, p.lat, p.lon) <= radiusMeters;
   };
 
+  // Forbidden zones must survive whole: a radius-clipped ring breaks the
+  // point-in-polygon test, so their ways (and relations) bypass the filter.
+  const zoneWayIds = new Set<number>();
+  for (const el of response.elements) {
+    if (el.type === 'way' && isForbiddenZoneTags(el.tags)) zoneWayIds.add(el.id);
+    if (el.type === 'relation' && isForbiddenZoneTags(el.tags)) {
+      for (const m of el.members) if (m.type === 'way') zoneWayIds.add(m.ref);
+    }
+  }
+
   const keptWays: OverpassWay[] = [];
   const keptNodeIds = new Set<number>();
   for (const el of response.elements) {
     if (el.type !== 'way') continue;
-    if (el.nodes.some(inside)) {
+    if (zoneWayIds.has(el.id) || el.nodes.some(inside)) {
       keptWays.push(el);
       for (const id of el.nodes) keptNodeIds.add(id);
     }
   }
-  const elements: (OverpassNode | OverpassWay)[] = [...keptWays];
+  const elements: OverpassElement[] = [...keptWays];
   for (const el of response.elements) {
     if (el.type === 'node' && keptNodeIds.has(el.id)) elements.push(el);
+    if (el.type === 'relation' && isForbiddenZoneTags(el.tags)) elements.push(el);
   }
   return { elements };
 }
