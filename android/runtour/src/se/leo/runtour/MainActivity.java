@@ -108,6 +108,8 @@ public class MainActivity extends Activity {
     /** Bound for the web run UI; the binding keeps the finished service's
         summary alive until the page has read it. */
     private volatile RunService runService;
+    /** Last download status, for showing the notice right after a grant. */
+    private volatile String pendingDownloadText;
     private String pendingRunTourId;
     private String pendingGeoOrigin;
     private GeolocationPermissions.Callback pendingGeoCallback;
@@ -329,9 +331,21 @@ public class MainActivity extends Activity {
             }
             return;
         }
-        // Download notifications: nothing pending — the next status update
-        // re-calls startForeground, so the ongoing notice appears by itself.
-        if (req == REQ_DOWNLOAD_PERMISSION) return;
+        if (req == REQ_DOWNLOAD_PERMISSION) {
+            // First download: the grant arrives mid-download, and the next
+            // status update may be many seconds out — show the notice now.
+            String text = pendingDownloadText;
+            if (text != null && !text.isEmpty()) {
+                try {
+                    startForegroundService(new Intent(this, DownloadService.class)
+                            .setAction(DownloadService.ACTION_STATUS)
+                            .putExtra(DownloadService.EXTRA_TEXT, text));
+                } catch (Exception ignored) {
+                    // Purely cosmetic; the download is running regardless.
+                }
+            }
+            return;
+        }
         if (req != REQ_RUN_PERMISSIONS) return;
         String tourId = pendingRunTourId;
         pendingRunTourId = null;
@@ -411,6 +425,7 @@ public class MainActivity extends Activity {
          */
         @JavascriptInterface
         public void downloadStatus(String text) {
+            pendingDownloadText = text == null ? "" : text;
             Intent intent = new Intent(MainActivity.this, DownloadService.class)
                     .setAction(DownloadService.ACTION_STATUS)
                     .putExtra(DownloadService.EXTRA_TEXT, text == null ? "" : text);

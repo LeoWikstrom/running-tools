@@ -44,6 +44,8 @@ public class MainActivity extends Activity {
     private String pendingGeoOrigin;
     private GeolocationPermissions.Callback pendingGeoCallback;
     private ValueCallback<Uri[]> pendingFileCallback;
+    /** Last download status, for showing the notice right after a grant. */
+    private volatile String pendingDownloadText;
 
     private static String mimeFor(String path) {
         if (path.endsWith(".html")) return "text/html";
@@ -158,6 +160,7 @@ public class MainActivity extends Activity {
          */
         @JavascriptInterface
         public void downloadStatus(String text) {
+            pendingDownloadText = text == null ? "" : text;
             Intent intent = new Intent(MainActivity.this, DownloadService.class)
                     .setAction(DownloadService.ACTION_STATUS)
                     .putExtra(DownloadService.EXTRA_TEXT, text == null ? "" : text);
@@ -212,6 +215,21 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int req, String[] perms, int[] results) {
         super.onRequestPermissionsResult(req, perms, results);
+        if (req == REQ_DOWNLOAD_PERMISSION) {
+            // First download: the grant arrives mid-download, and the next
+            // status update may be many seconds out — show the notice now.
+            String text = pendingDownloadText;
+            if (text != null && !text.isEmpty()) {
+                try {
+                    startForegroundService(new Intent(this, DownloadService.class)
+                            .setAction(DownloadService.ACTION_STATUS)
+                            .putExtra(DownloadService.EXTRA_TEXT, text));
+                } catch (Exception ignored) {
+                    // Purely cosmetic; the download is running regardless.
+                }
+            }
+            return;
+        }
         if (req != REQ_GEO_PERMISSION) return;
         boolean fineLocation = false;
         for (int i = 0; i < perms.length; i++) {

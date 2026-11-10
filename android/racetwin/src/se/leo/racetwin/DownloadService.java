@@ -72,14 +72,19 @@ public class DownloadService extends Service {
         Intent open = new Intent(this, MainActivity.class);
         PendingIntent content = PendingIntent.getActivity(this, 0, open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        return new Notification.Builder(this, CHANNEL)
+        Notification.Builder b = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_run)
                 .setContentTitle("Downloading")
                 .setContentText(text)
                 .setContentIntent(content)
                 .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .build();
+                .setOnlyAlertOnce(true);
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            // Android 12+ holds foreground-service notifications back ~10 s
+            // ("short task" heuristic); a download should show at once.
+            b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
+        }
+        return b.build();
     }
 
     @Override
