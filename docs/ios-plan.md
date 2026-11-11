@@ -2,6 +2,24 @@
 
 Nov 10, 2026 · @Leo
 
+## Status (Nov 11, 2026)
+
+Phase A scaffolding is built: `ios/runtour/` holds the XcodeGen `project.yml` and the
+Swift wrapper (AppDelegate, WebViewController, AppSchemeHandler serving `www/` on
+`runtour://app/`, sw.js 404s, external links to Safari). `.github/workflows/ios.yml`
+builds the web app, bakes the icon from the Android artwork, generates the project and
+runs one of two lanes: `simulator` (unsigned compile check, no Apple account needed,
+kept green) and `testflight` (cloud-signed archive + upload; needs the four secrets
+listed in the workflow header: APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8).
+
+Leo's steps to reach TestFlight: enroll in the Apple Developer Program ($99/yr) →
+App Store Connect → create an API key (Users and Access → Integrations, role
+App Manager; note Key ID + Issuer ID, download the .p8) → register the app
+(bundle id `se.leo.runtour`, created automatically by the first signed build, or by
+hand under Identifiers) → create the app record in App Store Connect pointing at that
+bundle id → add the four GitHub secrets → run the iOS workflow with lane `testflight`
+→ install via the TestFlight app on the iPhone.
+
 Goal: the runtour web app as a native iOS app on the App Store, with run playback
 (background GPS + audio) on par with the Android APK. Constraint that shapes everything:
 development happens on a phone (Termux), there is **no Mac** — an iPhone is available for

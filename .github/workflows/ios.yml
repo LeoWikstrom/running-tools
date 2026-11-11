@@ -1,0 +1,116 @@
+name: iOS
+
+# Builds the RunTour WKWebView wrapper (ios/runtour, XcodeGen project; plan
+# in docs/ios-plan.md). There is no Mac in this project — this workflow IS
+# the Mac. Two lanes:
+#
+#   simulator  — unsigned build against the iOS simulator SDK: proves the
+#                Swift sources, project.yml and web-asset packaging compile.
+#                Needs no Apple account.
+#   testflight — signed archive uploaded to App Store Connect / TestFlight.
+#                Needs the Apple Developer secrets below; signing uses
+#                xcodebuild's cloud signing (-allowProvisioningUpdates with
+#                an App Store Connect API key), so no certificates live here.
+#
+# Secrets for the testflight lane:
+#   APPLE_TEAM_ID    — developer team id (10 chars)
+#   ASC_KEY_ID       — App Store Connect API key id
+#   ASC_ISSUER_ID    — App Store Connect API issuer id
+#   ASC_KEY_P8       — the .p8 private key's full text
+
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Build lane
+        type: choice
+        default: simulator
+        options: [simulator, testflight]
+
+concurrency:
+  group: ios
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build the web app
+        run: npm run build -w runtour
+      - name: Copy the web build into the iOS bundle
+        run: |
+          rm -rf ios/runtour/www
+          cp -r apps/runtour/dist ios/runtour/www
+      - name: Bake the app icon
+        # The Android launcher artwork flattened onto its background colour:
+        # the App Store rejects a marketing icon with an alpha channel.
+        run: |
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          from PIL import Image
+          art = Image.open('android/runtour/variants/runtour-icon.png').convert('RGBA')
+          art = art.resize((1024, 1024), Image.LANCZOS)
+          out = Image.new('RGB', (1024, 1024), '#2D7A4F')
+          out.paste(art, (0, 0), art)
+          out.save('ios/runtour/Assets.xcassets/AppIcon.appiconset/icon-1024.png')
+          PY
+      - name: Generate the Xcode project
+        run: |
+          brew install xcodegen
+          cd ios/runtour && xcodegen generate
+      - name: Build (simulator, unsigned)
+        if: inputs.lane == 'simulator'
+        run: |
+          cd ios/runtour
+          xcodebuild build \
+            -project RunTour.xcodeproj -scheme RunTour \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Archive and upload to TestFlight
+        if: inputs.lane == 'testflight'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          [ -n "$ASC_KEY_ID" ] || { echo '::error::Apple secrets are not configured'; exit 1; }
+          KEYDIR="$RUNNER_TEMP/asc"
+          mkdir -p "$KEYDIR"
+          printf '%s' "$ASC_KEY_P8" > "$KEYDIR/AuthKey_$ASC_KEY_ID.p8"
+          cd ios/runtour
+          # The Android versionCode scheme: grows every hour, fits 2^31.
+          BUILD_NUMBER="$(date +%Y%m%d%H)"
+          xcodebuild archive \
+            -project RunTour.xcodeproj -scheme RunTour \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/RunTour.xcarchive \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEYDIR/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+          cat > build/export.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath build/RunTour.xcarchive \
+            -exportOptionsPlist build/export.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEYDIR/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"

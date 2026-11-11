@@ -1,0 +1,45 @@
+# XcodeGen project definition — the .xcodeproj is generated fresh in CI
+# (there is no Mac here to maintain one by hand). `xcodegen generate` in this
+# directory; the web build must sit in www/ first (CI copies apps/runtour/dist).
+name: RunTour
+options:
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: se.leo.runtour
+    MARKETING_VERSION: "0.1"
+    # Overridden per build in CI with the date-derived number (the Android
+    # versionCode scheme), so uploads always increase.
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    CODE_SIGN_STYLE: Automatic
+targets:
+  RunTour:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Assets.xcassets
+      # Folder reference: the whole web build ships as Resources/www.
+      - path: www
+        type: folder
+        buildPhase: resources
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: RunTour
+        # An empty launch-screen dict is what opts the app into the full
+        # native resolution; without it the WebView letterboxes.
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSLocationWhenInUseUsageDescription: >-
+          RunTour shows where you are on the map and, during a run preview,
+          plays each place's narration as you reach it.
+        ITSAppUsesNonExemptEncryption: false
