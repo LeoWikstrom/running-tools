@@ -51,8 +51,9 @@ jobs:
         # The Android launcher artwork flattened onto its background colour:
         # the App Store rejects a marketing icon with an alpha channel.
         run: |
-          python3 -m pip install --quiet pillow
-          python3 - <<'PY'
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet pillow
+          "$RUNNER_TEMP/venv/bin/python" - <<'PY'
           from PIL import Image
           art = Image.open('android/runtour/variants/runtour-icon.png').convert('RGBA')
           art = art.resize((1024, 1024), Image.LANCZOS)
