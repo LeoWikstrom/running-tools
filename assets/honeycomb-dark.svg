@@ -1,0 +1,41 @@
+<!--
+  Honeycomb background tile (dark theme — light strokes) — pointy-top hex grid, tessellates perfectly.
+
+  Geometry (side length s = 30):
+    Hex width   W = s√3 ≈ 52  (rounded to 52 for integer alignment)
+    Hex height  h = 2s = 60
+    Row height  3s/2 = 45     (odd rows offset horizontally by W/2 = 26)
+    Tile size   W × 3s = 52 × 90   (one horizontal period × two vertical rows)
+
+  Pattern hex centres per tile:
+    Even row (in-tile): (26, 30)                    — full hex
+    Offset row wraps at tile edges — half hexes on left / right edges of the
+    tile combine into a full hex across two adjacent tiles.
+    The offset row also spans the top/bottom tile boundary — bottom of the
+    hex from THIS tile bleeds into the tile below. To make the pattern
+    tessellate seamlessly at the top/bottom seam we also draw the offset
+    hex from the tile ABOVE (centre at y = -15), so its bottom half fills
+    the top of this tile.
+
+  Five polygons total:
+    (0, -15), (52, -15)   — bottom halves of offset hexes from tile above
+    (26, 30)              — full even-row hex
+    (0, 75),  (52, 75)    — top halves of offset hexes from THIS tile
+    (their bottom halves get drawn by the tile below via its own (0, -15)
+     and (52, -15) polygons)
+
+  Stroke is hardcoded to a low-opacity ink tone; `currentColor` doesn't
+  work here because an SVG loaded via `background-image: url()` doesn't
+  inherit CSS from the referring document.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="52" height="90" viewBox="0 0 52 90"
+     overflow="hidden">
+  <g fill="none" stroke="rgb(245, 243, 239)" stroke-width="1" stroke-opacity="0.05">
+    <polygon points="0,-45  26,-30  26,0   0,15  -26,0   -26,-30"/>
+    <polygon points="52,-45 78,-30  78,0   52,15  26,0    26,-30"/>
+    <polygon points="26,0   52,15   52,45  26,60  0,45    0,15"/>
+    <polygon points="0,45   26,60   26,90  0,105 -26,90  -26,60"/>
+    <polygon points="52,45  78,60   78,90  52,105 26,90   26,60"/>
+  </g>
+</svg>

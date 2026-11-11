@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#2d7a4f" />
+    <title>RunTour</title>
+    <script type="module" crossorigin src="./assets/index-DqVwvwFo.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-mtgnkc1O.css">
+  </head>
+  <body>
+    <div id="map"></div>
+    <div id="prune-bar" hidden>
+      <button id="prune-undo" title="Undo prune" aria-label="Undo prune" disabled>↶</button>
+      <button id="prune-redo" title="Redo prune" aria-label="Redo prune" disabled>↷</button>
+      <button id="prune-done">Done</button>
+    </div>
+    <div id="map-buttons">
+      <button id="locate-btn" aria-pressed="false" aria-label="Show my position" title="Show my position">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+          <circle cx="12" cy="12" r="2.6" fill="currentColor" />
+          <path d="M12 1v4M12 19v4M1 12h4M19 12h4" stroke="currentColor" stroke-width="2" />
+        </svg>
+      </button>
+      <button id="markers-btn" class="active" aria-pressed="true" aria-label="Show place markers" title="Show place markers" hidden>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 2a6 6 0 0 1 6 6c0 4.2-6 12-6 12S6 12.2 6 8a6 6 0 0 1 6-6z" fill="none" stroke="currentColor" stroke-width="2" />
+          <circle cx="12" cy="8" r="2.2" fill="currentColor" />
+        </svg>
+      </button>
+    </div>
+    <div id="preview-controls" hidden>
+      <div class="row">
+        <label class="control pace-control">
+          <span>min/km</span>
+          <input type="text" id="pace-input" value="5:30" size="5" />
+        </label>
+        <label class="check"><input type="checkbox" id="preview-fast" /> ×10</label>
+        <button id="preview-btn">Preview</button>
+        <button id="preview-pause" hidden>Pause</button>
+      </div>
+    </div>
+    <div id="sheet">
+      <div id="sheet-top">
+        <div id="sheet-handle" role="button" aria-label="Resize the panel" tabindex="0"></div>
+      </div>
+      <section id="controls">
+        <h1>RunTour</h1>
+        <div id="shelf" hidden></div>
+        <div class="row">
+          <label class="control lang-control">
+            <span>Narration</span>
+            <select id="narration-lang">
+              <option value="en" selected>English</option>
+              <option value="sv">Svenska</option>
+              <option value="it">Italiano</option>
+            </select>
+          </label>
+          <label class="control grow-control">
+            <span>Clip length: <output id="target-output">40</output> s</span>
+            <input type="range" id="target-seconds" min="20" max="120" step="5" value="40" />
+          </label>
+        </div>
+        <label class="check"
+          ><input type="checkbox" id="native-only" checked /> Only places with sources in this language
+          <button id="native-only-info" class="info" aria-label="About this option" hidden>ⓘ</button>
+        </label>
+        <p class="hint" id="course-stats" hidden></p>
+        <p class="hint run-only" id="hint">
+          Long-press the map to place a start, then Generate.
+          <button id="gen-info" class="info" aria-label="How generating works">ⓘ</button>
+        </p>
+        <div class="row wrap run-only">
+          <button id="set-start">Set start</button>
+          <button id="set-finish">Set finish</button>
+          <label class="control len-control">
+            <span>Length km</span>
+            <input
+              type="number"
+              id="gen-length"
+              value="8"
+              min="1"
+              max="42"
+              step="0.5"
+              placeholder="shortest"
+              title="Empty with a finish set: the shortest course that still collects interesting places"
+            />
+          </label>
+          <button id="gen-run">Generate</button>
+          <button id="gen-prune" hidden aria-pressed="false">Prune spurs by hand</button>
+        </div>
+        <div id="bus-section" class="bus-only">
+          <p class="hint" id="bus-hint">
+            List the bus and tram lines around the map view and pick one.
+            <button id="bus-info" class="info" aria-label="How the bus tour works">ⓘ</button>
+          </p>
+          <div class="row" id="bus-find-row">
+            <input type="search" id="bus-search" placeholder="e.g. “tram 3”, “16”, a name (optional)" />
+            <button id="bus-find">Find lines</button>
+            <button id="bus-clear" hidden>Clear route</button>
+          </div>
+          <p class="hint" id="bus-status" hidden></p>
+          <ul id="bus-list" hidden></ul>
+          <div id="bus-pick" hidden>
+            <p id="bus-pick-name"></p>
+            <div class="row">
+              <label class="control grow-control">
+                <span>From stop</span>
+                <select id="bus-from"></select>
+              </label>
+              <label class="control grow-control">
+                <span>To stop</span>
+                <select id="bus-to"></select>
+              </label>
+            </div>
+            <div class="row">
+              <button id="bus-use">Create the tour</button>
+              <button id="bus-back">Back to lines</button>
+            </div>
+          </div>
+        </div>
+        <p class="hint" id="gen-status" hidden></p>
+        <p class="hint" id="status" hidden></p>
+        <div id="text-controls" hidden>
+          <div class="row">
+            <button id="export-tour">Save tour.json</button>
+            <button id="export-gpx">GPX ⤓</button>
+            <button id="save-phone" hidden>Save to phone</button>
+          </div>
+        </div>
+        <div id="search-row">
+          <input type="search" id="name-search" placeholder="Add a place by name…" />
+          <button id="search-btn">Search</button>
+        </div>
+        <p class="hint" id="search-status" hidden></p>
+        <ul id="search-results" hidden></ul>
+        <div class="row" id="list-lang-row" hidden>
+          <label class="control lang-control">
+            <span>Narration</span>
+            <select id="narration-lang-list">
+              <option value="en" selected>English</option>
+              <option value="sv">Svenska</option>
+              <option value="it">Italiano</option>
+            </select>
+          </label>
+        </div>
+        <ol id="place-list"></ol>
+        <details class="section" id="settings-section">
+          <summary>Settings</summary>
+          <div class="section-body">
+            <label class="control lang-control">
+              <span>Local Wikipedia</span>
+              <input type="text" id="lang-input" value="sv" size="3" maxlength="7" />
+            </label>
+            <label class="check">
+              <input type="checkbox" id="historic-images" />
+              Historical pictures of the places (Wikimedia Commons)
+            </label>
+            <label class="check">
+              <input type="checkbox" id="show-preview" checked />
+              Show the preview bar over the map
+            </label>
+            <label class="check">
+              <input type="checkbox" id="include-streets" />
+              Include streets as places
+            </label>
+            <label class="check">
+              <input type="checkbox" id="include-squares" />
+              Include squares as places
+            </label>
+            <label class="check">
+              <input type="checkbox" id="include-events" />
+              Include events (crashes, battles, disasters)
+            </label>
+            <label class="check">
+              <input type="checkbox" id="show-candidates-corridor" />
+              Show filtered-out candidates near the course
+            </label>
+            <label class="check">
+              <input type="checkbox" id="show-candidates-all" />
+              Show all fetched candidates on the map
+            </label>
+            <label class="control run-only">
+              <span>More places ↔ more direct</span>
+              <input type="range" id="gen-places" min="0" max="100" value="50" />
+            </label>
+            <label class="control run-only">
+              <span>Pedestrian only ↔ roads too</span>
+              <input type="range" id="gen-pedestrian" min="0" max="100" value="30" />
+            </label>
+            <label class="control run-only">
+              <span>Historic centre ↔ outskirts too</span>
+              <input type="range" id="gen-centre" min="0" max="100" value="50" />
+            </label>
+            <label class="control run-only">
+              <span>Twists and turns ↔ circular</span>
+              <input type="range" id="gen-twists" min="0" max="100" value="100" />
+            </label>
+            <div class="subgroup run-only">
+              <h3>Path network</h3>
+              <div class="row">
+                <label class="control len-control">
+                  <span>Area km</span>
+                  <input type="number" id="area-radius" value="3" min="1" max="10" step="0.5" />
+                </label>
+                <button id="area-download" disabled>Download path network</button>
+              </div>
+              <p class="hint">
+                Downloads the paths around the start once; generating inside a saved area skips
+                the unreliable Overpass servers. Traveling? Download the destination before the
+                trip — outside Sweden the download leans on those servers and can take many
+                minutes, so it is best done at home, in advance.
+              </p>
+              <p class="hint" id="area-status" hidden></p>
+              <ul id="area-list" hidden></ul>
+            </div>
+          </div>
+        </details>
+        <details class="section" id="upload-section">
+          <summary>Upload a course</summary>
+          <div class="section-body">
+            <div class="row" id="gpx-row">
+              <label class="control">
+                <span>Course GPX</span>
+                <input type="file" id="gpx-input" accept=".gpx,application/gpx+xml" />
+              </label>
+              <label class="control">
+                <span>Tour JSON</span>
+                <input type="file" id="tour-input" accept=".json,application/json" />
+              </label>
+            </div>
+            <div class="row" id="places-row" hidden>
+              <button id="find-places">Find places</button>
+            </div>
+          </div>
+        </details>
+      </section>
+    </div>
+  </body>
+</html>

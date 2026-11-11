@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tours &amp; Courses</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Tours &amp; Courses</h1>
+        <p>
+          Audio-guided runs and rides, and training courses that twin your race.
+          Free, client-only, no accounts.
+        </p>
+      </header>
+
+      <ul class="apps">
+        <li class="app" style="--app-accent: #c63d80; --app-accent-deep: #a62d68">
+          <h2><a href="./profile-course/" target="_blank" rel="noopener">RaceTwin</a></h2>
+          <svg
+            class="app-art"
+            viewBox="0 0 320 120"
+            role="img"
+            aria-label="Two matching elevation profiles, and the generated course drawn on a map"
+            data-tours-art
+          >
+            <g class="grid" fill="none">
+              <path class="draw" pathLength="1" d="M16 12 V100 H172" />
+            </g>
+            <polyline
+              class="race draw"
+              pathLength="1"
+              style="--d: 0.4s"
+              fill="none"
+              points="24,76 46,50 64,64 88,32 114,50 138,26 164,68"
+            />
+            <polyline
+              class="accent-line thin draw"
+              pathLength="1"
+              style="--d: 1.1s"
+              fill="none"
+              points="24,80 48,54 66,68 90,36 116,54 140,30 164,72"
+            />
+            <rect class="map-bg" x="192" y="10" width="116" height="100" rx="10" />
+            <g class="streets" fill="none">
+              <path d="M192 44 H308 M192 78 H308 M228 10 V110 M266 10 V110" />
+            </g>
+            <path
+              class="accent-line thin draw"
+              pathLength="1"
+              style="--d: 1.1s"
+              fill="none"
+              d="M220 86 V48 L248 30 L286 42 L290 72 L258 94 Z"
+            />
+            <circle class="accent-fill pop" style="--d: 1s" cx="220" cy="86" r="5" />
+          </svg>
+          <p>
+            Training for a hilly race? Upload the race GPX, pick a start point near home, and
+            get a runnable course whose elevation profile twins the race.
+          </p>
+          <nav>
+            <a class="button" href="./profile-course/" target="_blank" rel="noopener">Open the app</a>
+            <a
+              class="button secondary"
+              href="https://github.com/LeoWikstrom/running-tools/releases/latest/download/racetwin.apk"
+              >Download Android APK</a
+            >
+          </nav>
+        </li>
+
+        <li class="app" style="--app-accent: #2d7a4f; --app-accent-deep: #1f5c3a">
+          <h2><a href="./runtour/" target="_blank" rel="noopener">RunTour</a></h2>
+          <svg
+            class="app-art"
+            viewBox="0 0 320 120"
+            role="img"
+            aria-label="A running route on a map, with places along it that speak as you pass"
+            data-tours-art
+          >
+            <rect class="map-bg" x="6" y="6" width="308" height="108" rx="10" />
+            <g class="streets" fill="none">
+              <path d="M6 42 H314 M6 80 H314 M74 6 V114 M152 6 V114 M238 6 V114" />
+            </g>
+            <path
+              class="accent-line draw"
+              pathLength="1"
+              style="--dur: 2.2s; --ease: linear"
+              fill="none"
+              d="M28 96 C60 96 62 58 98 58 S140 92 176 88 220 46 252 46"
+            />
+            <circle class="accent-fill pop" cx="28" cy="96" r="6" />
+            <circle class="poi pop" style="--d: 0.6s" cx="98" cy="58" r="5" />
+            <circle class="poi pop" style="--d: 1.35s" cx="176" cy="88" r="5" />
+            <circle class="poi pop" style="--d: 2.1s" cx="252" cy="46" r="5" />
+            <g class="waves burst" style="--d: 0.65s" fill="none">
+              <path d="M91 64 A10 10 0 0 1 90 53" />
+              <path d="M87 68 A16 16 0 0 1 85 50" />
+            </g>
+            <g class="waves burst" style="--d: 1.4s" fill="none">
+              <path d="M169 94 A10 10 0 0 1 168 83" />
+              <path d="M165 98 A16 16 0 0 1 163 80" />
+            </g>
+            <image class="pop" style="--d: 2.1s" href="./assets/runner.png" x="202" y="37" width="25" height="28" />
+            <g class="waves stay" style="--d: 2.3s" fill="none">
+              <path d="M244 52 A10 10 0 0 1 243 41" />
+              <path d="M240 56 A16 16 0 0 1 238 38" />
+              <path d="M235 60 A22 22 0 0 1 233 35" />
+            </g>
+          </svg>
+          <p>
+            An audio guide for your run: generate a route, pick up places along the way with
+            texts from Wikipedia, and let GPS trigger the narration as you pass them.
+          </p>
+          <nav>
+            <a class="button" href="./runtour/" target="_blank" rel="noopener">Open the app</a>
+            <a
+              class="button secondary"
+              href="https://github.com/LeoWikstrom/running-tools/releases/latest/download/runtour.apk"
+              >Download Android APK</a
+            >
+          </nav>
+        </li>
+
+        <li class="app" style="--app-accent: #1d5fa8; --app-accent-deep: #164a85">
+          <h2><a href="./bustour/" target="_blank" rel="noopener">BusTour</a></h2>
+          <svg
+            class="app-art"
+            viewBox="0 0 320 120"
+            role="img"
+            aria-label="A bus line with stops on a map, and narration playing along the ride"
+            data-tours-art
+          >
+            <rect class="map-bg" x="6" y="6" width="308" height="108" rx="10" />
+            <g class="streets" fill="none">
+              <path d="M6 36 H314 M6 92 H314 M100 6 V114 M210 6 V114" />
+            </g>
+            <path
+              class="accent-line draw"
+              pathLength="1"
+              style="--dur: 2.2s; --ease: linear"
+              fill="none"
+              d="M22 90 H118 C146 90 146 60 174 60 H298"
+            />
+            <circle class="poi pop" style="--d: 0.2s" cx="48" cy="90" r="5" />
+            <circle class="poi pop" style="--d: 0.6s" cx="104" cy="90" r="5" />
+            <circle class="poi pop" style="--d: 1.3s" cx="184" cy="60" r="5" />
+            <circle class="poi pop" style="--d: 1.9s" cx="284" cy="60" r="5" />
+            <g class="waves burst" style="--d: 0.25s" fill="none">
+              <path d="M41 96 A10 10 0 0 1 40 85" />
+              <path d="M37 100 A16 16 0 0 1 35 82" />
+            </g>
+            <g class="waves burst" style="--d: 0.65s" fill="none">
+              <path d="M97 96 A10 10 0 0 1 96 85" />
+              <path d="M93 100 A16 16 0 0 1 91 82" />
+            </g>
+            <g class="waves burst" style="--d: 1.35s" fill="none">
+              <path d="M177 66 A10 10 0 0 1 176 55" />
+              <path d="M173 70 A16 16 0 0 1 171 52" />
+            </g>
+            <!-- The bus rides the route (CSS offset-path along the same path the
+                 accent line draws), body bumping on its wheels; anchor (0,0) sits
+                 on the line, and the resting state parks it where it always stood. -->
+            <g class="bus" style="--d: 0.15s">
+              <circle class="bus-wheel" cx="-14" cy="-2" r="5" />
+              <circle class="bus-wheel" cx="14" cy="-2" r="5" />
+              <g class="bus-top">
+                <rect class="bus-body" x="-26" y="-30" width="52" height="26" rx="7" />
+                <rect class="bus-detail" x="-20" y="-24" width="9" height="9" rx="2" />
+                <rect class="bus-detail" x="-7" y="-24" width="9" height="9" rx="2" />
+                <rect class="bus-detail" x="6" y="-24" width="9" height="9" rx="2" />
+              </g>
+            </g>
+            <g class="waves stay" style="--d: 2.05s" fill="none">
+              <path d="M275 62 A9 9 0 0 1 279 53" />
+              <path d="M269 63 A15 15 0 0 1 276 48" />
+              <path d="M263 64 A21 21 0 0 1 272 43" />
+            </g>
+          </svg>
+          <p>
+            The same audio guide for the bus: pick a bus line, the app finds the places along
+            the route, and GPS triggers the narration while you ride.
+          </p>
+          <nav>
+            <a class="button" href="./bustour/" target="_blank" rel="noopener">Open the app</a>
+            <a
+              class="button secondary"
+              href="https://github.com/LeoWikstrom/running-tools/releases/latest/download/bustour.apk"
+              >Download Android APK</a
+            >
+          </nav>
+        </li>
+
+        <!-- New app? Build it under apps/<name> (the Pages workflow deploys every
+             apps/*/dist automatically) and add a card here pointing at ./<name>/. -->
+      </ul>
+
+      <footer>
+        <a href="https://github.com/LeoWikstrom/running-tools">Source on GitHub</a>
+      </footer>
+    </main>
+    <script>
+      // One-shot draw-on reveal: each artwork gets data-play on its first
+      // viewport entry and the routes/profile lines sweep in. The hidden
+      // initial state lives behind prefers-reduced-motion in the CSS, so
+      // reduced-motion visitors always see the finished art.
+      (function () {
+        'use strict';
+        const arts = document.querySelectorAll('[data-tours-art]');
+        if (!arts.length) return;
+        const io = new IntersectionObserver(
+          (entries, obs) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue;
+              entry.target.dataset.play = 'true';
+              obs.unobserve(entry.target);
+            }
+          },
+          { threshold: 0.6 },
+        );
+        arts.forEach((svg) => io.observe(svg));
+      })();
+    </script>
+  </body>
+</html>
