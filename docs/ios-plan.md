@@ -15,7 +15,7 @@ listed in the workflow header: APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY
 Leo's steps to reach TestFlight: enroll in the Apple Developer Program ($99/yr) →
 App Store Connect → create an API key (Users and Access → Integrations, role
 App Manager; note Key ID + Issuer ID, download the .p8) → register the app
-(bundle id `se.leo.runtour`, created automatically by the first signed build, or by
+(bundle id `se.eq2.runtour`, created automatically by the first signed build, or by
 hand under Identifiers) → create the app record in App Store Connect pointing at that
 bundle id → add the four GitHub secrets → run the iOS workflow with lane `testflight`
 → install via the TestFlight app on the iPhone.

@@ -8,7 +8,7 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    PRODUCT_BUNDLE_IDENTIFIER: se.leo.runtour
+    PRODUCT_BUNDLE_IDENTIFIER: se.eq2.runtour
     MARKETING_VERSION: "0.1"
     # Overridden per build in CI with the date-derived number (the Android
     # versionCode scheme), so uploads always increase.
